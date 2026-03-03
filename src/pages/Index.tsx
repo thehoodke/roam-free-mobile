@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { format, subMonths, addMonths } from "date-fns";
-import { Settings, ChevronLeft, ChevronRight } from "lucide-react";
+import { Settings, ChevronLeft, ChevronRight, BarChart3 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useBudgetStore } from "@/hooks/useBudgetStore";
 import BalanceCard from "@/components/BalanceCard";
@@ -8,32 +8,63 @@ import SpendingChart from "@/components/SpendingChart";
 import TransactionList from "@/components/TransactionList";
 import AddTransaction from "@/components/AddTransaction";
 import SettingsView from "@/components/SettingsView";
+import StatsView from "@/components/StatsView";
+
+type View = "home" | "settings" | "stats";
 
 const Index = () => {
+  const store = useBudgetStore();
   const {
     profile,
+    budgetConfig,
     addTransaction,
     deleteTransaction,
     updateProfile,
+    updateBudgetConfig,
     getPartnerName,
     getMonthTransactions,
     getTotals,
-  } = useBudgetStore();
+    getCategorySpending,
+    getPartnerSpending,
+    getDailyTrend,
+    getDayExpenses,
+    expenseCategories,
+    incomeCategories,
+  } = store;
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [showSettings, setShowSettings] = useState(false);
+  const [view, setView] = useState<View>("home");
 
   const monthKey = format(currentMonth, "yyyy-MM");
   const monthLabel = format(currentMonth, "MMMM yyyy");
   const totals = getTotals(monthKey);
   const monthTransactions = getMonthTransactions(monthKey);
 
-  if (showSettings) {
+  if (view === "settings") {
     return (
       <SettingsView
         profile={profile}
+        budgetConfig={budgetConfig}
         onUpdateProfile={updateProfile}
-        onBack={() => setShowSettings(false)}
+        onUpdateBudgetConfig={updateBudgetConfig}
+        onBack={() => setView("home")}
+        getPartnerName={getPartnerName}
+      />
+    );
+  }
+
+  if (view === "stats") {
+    return (
+      <StatsView
+        monthKey={monthKey}
+        monthLabel={monthLabel}
+        getCategorySpending={getCategorySpending}
+        getPartnerSpending={getPartnerSpending}
+        getDailyTrend={getDailyTrend}
+        getDayExpenses={getDayExpenses}
+        getPartnerName={getPartnerName}
+        budgetConfig={budgetConfig}
+        onBack={() => setView("home")}
       />
     );
   }
@@ -48,12 +79,20 @@ const Index = () => {
             {getPartnerName("A")} & {getPartnerName("B")}
           </p>
         </div>
-        <button
-          onClick={() => setShowSettings(true)}
-          className="flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80"
-        >
-          <Settings className="h-4 w-4" />
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setView("stats")}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80"
+          >
+            <BarChart3 className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setView("settings")}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+        </div>
       </header>
 
       {/* Month Selector */}
@@ -94,7 +133,12 @@ const Index = () => {
         </div>
       </main>
 
-      <AddTransaction onAdd={addTransaction} getPartnerName={getPartnerName} />
+      <AddTransaction
+        onAdd={addTransaction}
+        getPartnerName={getPartnerName}
+        expenseCategories={expenseCategories}
+        incomeCategories={incomeCategories}
+      />
     </div>
   );
 };

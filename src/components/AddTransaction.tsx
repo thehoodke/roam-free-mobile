@@ -11,19 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  EXPENSE_CATEGORIES,
-  INCOME_CATEGORIES,
-  Partner,
-  Transaction,
-} from "@/types/budget";
+import { Partner, Transaction } from "@/types/budget";
 
 interface AddTransactionProps {
   onAdd: (tx: Omit<Transaction, "id">) => void;
   getPartnerName: (p: Partner) => string;
+  expenseCategories: readonly string[] | string[];
+  incomeCategories: readonly string[] | string[];
 }
 
-export default function AddTransaction({ onAdd, getPartnerName }: AddTransactionProps) {
+export default function AddTransaction({ onAdd, getPartnerName, expenseCategories, incomeCategories }: AddTransactionProps) {
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<"income" | "expense">("expense");
   const [amount, setAmount] = useState("");
@@ -31,7 +28,7 @@ export default function AddTransaction({ onAdd, getPartnerName }: AddTransaction
   const [description, setDescription] = useState("");
   const [partner, setPartner] = useState<Partner>("A");
 
-  const categories = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+  const categories = type === "expense" ? expenseCategories : incomeCategories;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
