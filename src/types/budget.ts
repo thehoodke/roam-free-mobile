@@ -22,7 +22,16 @@ export interface CoupleProfile {
   partnerBName: string;
 }
 
-export const EXPENSE_CATEGORIES = [
+export interface BudgetConfig {
+  dailyLimitShared: number; // 0 = no limit
+  dailyLimitA: number;
+  dailyLimitB: number;
+  customExpenseCategories: string[];
+  customIncomeCategories: string[];
+  categoryLimits: Record<string, number>; // category -> monthly limit
+}
+
+export const DEFAULT_EXPENSE_CATEGORIES = [
   "🍔 Food & Dining",
   "🏠 Housing",
   "🚗 Transport",
@@ -35,10 +44,14 @@ export const EXPENSE_CATEGORIES = [
   "📦 Other",
 ] as const;
 
-export const INCOME_CATEGORIES = [
+export const DEFAULT_INCOME_CATEGORIES = [
   "💼 Salary",
   "💰 Freelance",
   "📈 Investments",
   "🎁 Gifts",
   "📦 Other",
 ] as const;
+
+// Keep backward compat aliases
+export const EXPENSE_CATEGORIES = DEFAULT_EXPENSE_CATEGORIES;
+export const INCOME_CATEGORIES = DEFAULT_INCOME_CATEGORIES;
