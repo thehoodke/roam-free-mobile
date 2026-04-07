@@ -153,6 +153,21 @@ export function useBudgetStore() {
     [transactions]
   );
 
+  // Monthly expenses total (optionally by partner)
+  const getMonthExpenses = useCallback(
+    (month: string, partner?: Partner) => {
+      return transactions
+        .filter(
+          (t) =>
+            t.type === "expense" &&
+            t.date.startsWith(month) &&
+            (partner ? t.partner === partner : true)
+        )
+        .reduce((s, t) => s + t.amount, 0);
+    },
+    [transactions]
+  );
+
   // Partner spending for a month
   const getPartnerSpending = useCallback(
     (month: string) => {
@@ -197,6 +212,7 @@ export function useBudgetStore() {
     getMonthTransactions,
     getTotals,
     getDayExpenses,
+    getMonthExpenses,
     getCategorySpending,
     getPartnerSpending,
     getDailyTrend,
