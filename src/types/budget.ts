@@ -26,6 +26,9 @@ export interface BudgetConfig {
   dailyLimitShared: number; // 0 = no limit
   dailyLimitA: number;
   dailyLimitB: number;
+  monthlyLimitShared: number;
+  monthlyLimitA: number;
+  monthlyLimitB: number;
   customExpenseCategories: string[];
   customIncomeCategories: string[];
   categoryLimits: Record<string, number>; // category -> monthly limit

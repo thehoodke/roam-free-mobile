@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
-import { TrendingUp, TrendingDown, Wallet } from "lucide-react";
+import { TrendingUp, TrendingDown } from "lucide-react";
+import { formatCurrency } from "@/lib/currency";
 
 interface BalanceCardProps {
   income: number;
@@ -16,8 +17,8 @@ export default function BalanceCard({ income, expenses, balance, monthLabel }: B
       className="glass-card rounded-3xl p-6"
     >
       <p className="text-sm font-medium text-muted-foreground mb-1">{monthLabel}</p>
-      <p className="font-display text-4xl font-bold tracking-tight">
-        ${balance.toFixed(2)}
+      <p className="font-display text-3xl font-bold tracking-tight">
+        {formatCurrency(balance)}
       </p>
       <p className="text-xs text-muted-foreground mt-1">Net balance</p>
 
@@ -28,7 +29,7 @@ export default function BalanceCard({ income, expenses, balance, monthLabel }: B
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Income</p>
-            <p className="text-sm font-bold text-income">${income.toFixed(2)}</p>
+            <p className="text-sm font-bold text-income">{formatCurrency(income)}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 rounded-2xl bg-expense/10 p-3">
@@ -37,7 +38,7 @@ export default function BalanceCard({ income, expenses, balance, monthLabel }: B
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Expenses</p>
-            <p className="text-sm font-bold text-expense">${expenses.toFixed(2)}</p>
+            <p className="text-sm font-bold text-expense">{formatCurrency(expenses)}</p>
           </div>
         </div>
       </div>
