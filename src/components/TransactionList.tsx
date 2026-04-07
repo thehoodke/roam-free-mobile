@@ -2,6 +2,7 @@ import { Transaction, Partner } from "@/types/budget";
 import { motion } from "framer-motion";
 import { Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { formatCurrency } from "@/lib/currency";
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -50,7 +51,7 @@ export default function TransactionList({
                 tx.type === "income" ? "text-income" : "text-expense"
               }`}
             >
-              {tx.type === "income" ? "+" : "−"}${tx.amount.toFixed(2)}
+              {tx.type === "income" ? "+" : "−"}{formatCurrency(tx.amount)}
             </p>
           </div>
           <button
