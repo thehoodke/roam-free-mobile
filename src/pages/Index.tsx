@@ -28,6 +28,7 @@ const Index = () => {
     getPartnerSpending,
     getDailyTrend,
     getDayExpenses,
+    getMonthExpenses,
     expenseCategories,
     incomeCategories,
   } = store;
@@ -62,6 +63,7 @@ const Index = () => {
         getPartnerSpending={getPartnerSpending}
         getDailyTrend={getDailyTrend}
         getDayExpenses={getDayExpenses}
+        getMonthExpenses={getMonthExpenses}
         getPartnerName={getPartnerName}
         budgetConfig={budgetConfig}
         onBack={() => setView("home")}
