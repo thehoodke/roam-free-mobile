@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,24 +11,39 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Partner, Transaction } from "@/types/budget";
+import { Partner, Transaction, PaymentMethod } from "@/types/budget";
 
 interface AddTransactionProps {
   onAdd: (tx: Omit<Transaction, "id">) => void;
   getPartnerName: (p: Partner) => string;
   expenseCategories: readonly string[] | string[];
   incomeCategories: readonly string[] | string[];
+  paymentMethods: PaymentMethod[];
+  displayCategory: (c: string) => string;
 }
 
-export default function AddTransaction({ onAdd, getPartnerName, expenseCategories, incomeCategories }: AddTransactionProps) {
+export default function AddTransaction({
+  onAdd,
+  getPartnerName,
+  expenseCategories,
+  incomeCategories,
+  paymentMethods,
+  displayCategory,
+}: AddTransactionProps) {
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<"income" | "expense">("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [partner, setPartner] = useState<Partner>("A");
+  const [paymentMethodId, setPaymentMethodId] = useState<string>(paymentMethods[0]?.id || "");
+  const [transactionCost, setTransactionCost] = useState("");
 
   const categories = type === "expense" ? expenseCategories : incomeCategories;
+  const selectedPm = useMemo(
+    () => paymentMethods.find((p) => p.id === paymentMethodId),
+    [paymentMethods, paymentMethodId]
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,10 +55,13 @@ export default function AddTransaction({ onAdd, getPartnerName, expenseCategorie
       description,
       partner,
       date: new Date().toISOString(),
+      paymentMethodId: paymentMethodId || undefined,
+      transactionCost: selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : undefined,
     });
     setAmount("");
     setCategory("");
     setDescription("");
+    setTransactionCost("");
     setOpen(false);
   };
 
@@ -72,7 +90,7 @@ export default function AddTransaction({ onAdd, getPartnerName, expenseCategorie
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-lg rounded-t-3xl bg-card p-6 pb-10 shadow-xl"
+              className="w-full max-w-lg rounded-t-3xl bg-card p-6 pb-10 shadow-xl max-h-[90vh] overflow-y-auto"
             >
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="font-display text-xl font-bold">Add Transaction</h2>
@@ -82,15 +100,12 @@ export default function AddTransaction({ onAdd, getPartnerName, expenseCategorie
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Type toggle */}
                 <div className="flex gap-2 rounded-xl bg-muted p-1">
                   <button
                     type="button"
                     onClick={() => { setType("expense"); setCategory(""); }}
                     className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${
-                      type === "expense"
-                        ? "bg-expense text-primary-foreground"
-                        : "text-muted-foreground"
+                      type === "expense" ? "bg-expense text-primary-foreground" : "text-muted-foreground"
                     }`}
                   >
                     Expense
@@ -99,16 +114,13 @@ export default function AddTransaction({ onAdd, getPartnerName, expenseCategorie
                     type="button"
                     onClick={() => { setType("income"); setCategory(""); }}
                     className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${
-                      type === "income"
-                        ? "bg-income text-primary-foreground"
-                        : "text-muted-foreground"
+                      type === "income" ? "bg-income text-primary-foreground" : "text-muted-foreground"
                     }`}
                   >
                     Income
                   </button>
                 </div>
 
-                {/* Amount */}
                 <div>
                   <Label htmlFor="amount">Amount</Label>
                   <Input
@@ -124,7 +136,6 @@ export default function AddTransaction({ onAdd, getPartnerName, expenseCategorie
                   />
                 </div>
 
-                {/* Category */}
                 <div>
                   <Label>Category</Label>
                   <Select value={category} onValueChange={setCategory} required>
@@ -134,14 +145,48 @@ export default function AddTransaction({ onAdd, getPartnerName, expenseCategorie
                     <SelectContent>
                       {categories.map((c) => (
                         <SelectItem key={c} value={c}>
-                          {c}
+                          {displayCategory(c)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                {/* Description */}
+                <div>
+                  <Label>Payment Method</Label>
+                  <Select value={paymentMethodId} onValueChange={(v) => { setPaymentMethodId(v); setTransactionCost(""); }}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select payment method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {paymentMethods.map((pm) => (
+                        <SelectItem key={pm.id} value={pm.id}>
+                          {pm.icon} {pm.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {selectedPm?.supportsFee && (
+                  <div>
+                    <Label htmlFor="fee">Transaction Cost (optional)</Label>
+                    <Input
+                      id="fee"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="e.g. 22"
+                      value={transactionCost}
+                      onChange={(e) => setTransactionCost(e.target.value)}
+                      className="mt-1"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Tracked separately as a "Transaction Fees" expense.
+                    </p>
+                  </div>
+                )}
+
                 <div>
                   <Label htmlFor="desc">Description (optional)</Label>
                   <Input
@@ -153,7 +198,6 @@ export default function AddTransaction({ onAdd, getPartnerName, expenseCategorie
                   />
                 </div>
 
-                {/* Partner */}
                 <div>
                   <Label>Who paid?</Label>
                   <div className="mt-1 flex gap-2">

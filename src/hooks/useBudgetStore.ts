@@ -6,6 +6,7 @@ import {
   BudgetConfig,
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_INCOME_CATEGORIES,
+  DEFAULT_PAYMENT_METHODS,
 } from "@/types/budget";
 import { format, startOfDay, endOfDay, parseISO, startOfWeek, endOfWeek, eachDayOfInterval, subDays } from "date-fns";
 
@@ -42,7 +43,9 @@ const defaultConfig: BudgetConfig = {
   monthlyLimitB: 0,
   customExpenseCategories: [],
   customIncomeCategories: [],
+  categoryRenames: {},
   categoryLimits: {},
+  paymentMethods: DEFAULT_PAYMENT_METHODS,
 };
 
 export function useBudgetStore() {
@@ -52,9 +55,10 @@ export function useBudgetStore() {
   const [profile, setProfile] = useState<CoupleProfile>(() =>
     loadFromStorage(STORAGE_KEYS.PROFILE, defaultProfile)
   );
-  const [budgetConfig, setBudgetConfig] = useState<BudgetConfig>(() =>
-    loadFromStorage(STORAGE_KEYS.BUDGET_CONFIG, defaultConfig)
-  );
+  const [budgetConfig, setBudgetConfig] = useState<BudgetConfig>(() => {
+    const loaded = loadFromStorage<Partial<BudgetConfig>>(STORAGE_KEYS.BUDGET_CONFIG, {});
+    return { ...defaultConfig, ...loaded } as BudgetConfig;
+  });
 
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.TRANSACTIONS, transactions);
@@ -69,12 +73,32 @@ export function useBudgetStore() {
   }, [budgetConfig]);
 
   const addTransaction = useCallback((tx: Omit<Transaction, "id">) => {
-    const newTx: Transaction = { ...tx, id: crypto.randomUUID() };
-    setTransactions((prev) => [newTx, ...prev]);
+    const id = crypto.randomUUID();
+    const newTx: Transaction = { ...tx, id };
+    setTransactions((prev) => {
+      const next = [newTx, ...prev];
+      // Auto-create a fee transaction if transactionCost provided
+      if (tx.transactionCost && tx.transactionCost > 0) {
+        const feeTx: Transaction = {
+          id: crypto.randomUUID(),
+          amount: tx.transactionCost,
+          type: "expense",
+          category: "💸 Transaction Fees",
+          description: `Fee for ${tx.description || tx.category}`,
+          partner: tx.partner,
+          date: tx.date,
+          paymentMethodId: tx.paymentMethodId,
+          isFee: true,
+          parentId: id,
+        };
+        return [feeTx, ...next];
+      }
+      return next;
+    });
   }, []);
 
   const deleteTransaction = useCallback((id: string) => {
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
+    setTransactions((prev) => prev.filter((t) => t.id !== id && t.parentId !== id));
   }, []);
 
   const updateProfile = useCallback((p: CoupleProfile) => {
@@ -200,6 +224,16 @@ export function useBudgetStore() {
     [transactions]
   );
 
+  const displayCategory = useCallback(
+    (c: string) => budgetConfig.categoryRenames?.[c] || c,
+    [budgetConfig.categoryRenames]
+  );
+
+  const getPaymentMethod = useCallback(
+    (id?: string) => budgetConfig.paymentMethods.find((p) => p.id === id),
+    [budgetConfig.paymentMethods]
+  );
+
   return {
     transactions,
     profile,
@@ -218,5 +252,8 @@ export function useBudgetStore() {
     getDailyTrend,
     expenseCategories,
     incomeCategories,
+    paymentMethods: budgetConfig.paymentMethods,
+    displayCategory,
+    getPaymentMethod,
   };
 }
