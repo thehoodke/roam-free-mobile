@@ -31,6 +31,9 @@ const Index = () => {
     getMonthExpenses,
     expenseCategories,
     incomeCategories,
+    paymentMethods,
+    displayCategory,
+    getPaymentMethod,
   } = store;
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -131,6 +134,8 @@ const Index = () => {
             transactions={monthTransactions}
             getPartnerName={getPartnerName}
             onDelete={deleteTransaction}
+            displayCategory={displayCategory}
+            getPaymentMethod={getPaymentMethod}
           />
         </div>
       </main>
@@ -140,6 +145,8 @@ const Index = () => {
         getPartnerName={getPartnerName}
         expenseCategories={expenseCategories}
         incomeCategories={incomeCategories}
+        paymentMethods={paymentMethods}
+        displayCategory={displayCategory}
       />
     </div>
   );

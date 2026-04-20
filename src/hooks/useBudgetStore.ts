@@ -224,6 +224,16 @@ export function useBudgetStore() {
     [transactions]
   );
 
+  const displayCategory = useCallback(
+    (c: string) => budgetConfig.categoryRenames?.[c] || c,
+    [budgetConfig.categoryRenames]
+  );
+
+  const getPaymentMethod = useCallback(
+    (id?: string) => budgetConfig.paymentMethods.find((p) => p.id === id),
+    [budgetConfig.paymentMethods]
+  );
+
   return {
     transactions,
     profile,
@@ -242,5 +252,8 @@ export function useBudgetStore() {
     getDailyTrend,
     expenseCategories,
     incomeCategories,
+    paymentMethods: budgetConfig.paymentMethods,
+    displayCategory,
+    getPaymentMethod,
   };
 }
