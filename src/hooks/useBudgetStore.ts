@@ -59,6 +59,11 @@ export function useBudgetStore() {
     loadFromStorage(STORAGE_KEYS.BUDGET_CONFIG, defaultConfig)
   );
 
+  const [budgetConfig, setBudgetConfig] = useState<BudgetConfig>(() => {
+    const loaded = loadFromStorage<Partial<BudgetConfig>>(STORAGE_KEYS.BUDGET_CONFIG, {});
+    return { ...defaultConfig, ...loaded } as BudgetConfig;
+  });
+
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.TRANSACTIONS, transactions);
   }, [transactions]);
@@ -72,12 +77,32 @@ export function useBudgetStore() {
   }, [budgetConfig]);
 
   const addTransaction = useCallback((tx: Omit<Transaction, "id">) => {
-    const newTx: Transaction = { ...tx, id: crypto.randomUUID() };
-    setTransactions((prev) => [newTx, ...prev]);
+    const id = crypto.randomUUID();
+    const newTx: Transaction = { ...tx, id };
+    setTransactions((prev) => {
+      const next = [newTx, ...prev];
+      // Auto-create a fee transaction if transactionCost provided
+      if (tx.transactionCost && tx.transactionCost > 0) {
+        const feeTx: Transaction = {
+          id: crypto.randomUUID(),
+          amount: tx.transactionCost,
+          type: "expense",
+          category: "💸 Transaction Fees",
+          description: `Fee for ${tx.description || tx.category}`,
+          partner: tx.partner,
+          date: tx.date,
+          paymentMethodId: tx.paymentMethodId,
+          isFee: true,
+          parentId: id,
+        };
+        return [feeTx, ...next];
+      }
+      return next;
+    });
   }, []);
 
   const deleteTransaction = useCallback((id: string) => {
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
+    setTransactions((prev) => prev.filter((t) => t.id !== id && t.parentId !== id));
   }, []);
 
   const updateProfile = useCallback((p: CoupleProfile) => {
