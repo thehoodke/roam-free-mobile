@@ -55,10 +55,6 @@ export function useBudgetStore() {
   const [profile, setProfile] = useState<CoupleProfile>(() =>
     loadFromStorage(STORAGE_KEYS.PROFILE, defaultProfile)
   );
-  const [budgetConfig, setBudgetConfig] = useState<BudgetConfig>(() =>
-    loadFromStorage(STORAGE_KEYS.BUDGET_CONFIG, defaultConfig)
-  );
-
   const [budgetConfig, setBudgetConfig] = useState<BudgetConfig>(() => {
     const loaded = loadFromStorage<Partial<BudgetConfig>>(STORAGE_KEYS.BUDGET_CONFIG, {});
     return { ...defaultConfig, ...loaded } as BudgetConfig;
