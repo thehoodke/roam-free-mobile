@@ -6,6 +6,7 @@ import {
   BudgetConfig,
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_INCOME_CATEGORIES,
+  DEFAULT_PAYMENT_METHODS,
 } from "@/types/budget";
 import { format, startOfDay, endOfDay, parseISO, startOfWeek, endOfWeek, eachDayOfInterval, subDays } from "date-fns";
 
@@ -42,7 +43,9 @@ const defaultConfig: BudgetConfig = {
   monthlyLimitB: 0,
   customExpenseCategories: [],
   customIncomeCategories: [],
+  categoryRenames: {},
   categoryLimits: {},
+  paymentMethods: DEFAULT_PAYMENT_METHODS,
 };
 
 export function useBudgetStore() {

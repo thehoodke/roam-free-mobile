@@ -1,5 +1,12 @@
 export type Partner = "A" | "B";
 
+export interface PaymentMethod {
+  id: string;
+  name: string;          // e.g. "M-Pesa", "Equity Bank"
+  icon?: string;         // emoji
+  supportsFee: boolean;  // whether to prompt for txn cost
+}
+
 export interface Transaction {
   id: string;
   amount: number;
@@ -8,6 +15,10 @@ export interface Transaction {
   description: string;
   partner: Partner;
   date: string; // ISO string
+  paymentMethodId?: string;
+  transactionCost?: number; // fee charged on top
+  isFee?: boolean;          // marks auto-generated fee entries
+  parentId?: string;        // links fee to source txn
 }
 
 export interface BudgetGoal {
@@ -23,7 +34,7 @@ export interface CoupleProfile {
 }
 
 export interface BudgetConfig {
-  dailyLimitShared: number; // 0 = no limit
+  dailyLimitShared: number;
   dailyLimitA: number;
   dailyLimitB: number;
   monthlyLimitShared: number;
@@ -31,7 +42,9 @@ export interface BudgetConfig {
   monthlyLimitB: number;
   customExpenseCategories: string[];
   customIncomeCategories: string[];
-  categoryLimits: Record<string, number>; // category -> monthly limit
+  categoryRenames: Record<string, string>; // originalName -> newName (works for defaults too)
+  categoryLimits: Record<string, number>;
+  paymentMethods: PaymentMethod[];
 }
 
 export const DEFAULT_EXPENSE_CATEGORIES = [
@@ -55,6 +68,12 @@ export const DEFAULT_INCOME_CATEGORIES = [
   "📦 Other",
 ] as const;
 
-// Keep backward compat aliases
+export const DEFAULT_PAYMENT_METHODS: PaymentMethod[] = [
+  { id: "cash", name: "Cash", icon: "💵", supportsFee: false },
+  { id: "mpesa", name: "M-Pesa", icon: "📱", supportsFee: true },
+  { id: "bank", name: "Bank Transfer", icon: "🏦", supportsFee: true },
+  { id: "card", name: "Card", icon: "💳", supportsFee: false },
+];
+
 export const EXPENSE_CATEGORIES = DEFAULT_EXPENSE_CATEGORIES;
 export const INCOME_CATEGORIES = DEFAULT_INCOME_CATEGORIES;
