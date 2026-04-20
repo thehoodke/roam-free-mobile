@@ -3,8 +3,9 @@ import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { CoupleProfile, BudgetConfig } from "@/types/budget";
-import { ArrowLeft, Heart, Wallet, Tag, Plus, X, CalendarDays } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { CoupleProfile, BudgetConfig, PaymentMethod, DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES } from "@/types/budget";
+import { ArrowLeft, Heart, Wallet, Tag, Plus, X, CalendarDays, CreditCard, Pencil, Check } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/currency";
 
@@ -15,6 +16,49 @@ interface SettingsViewProps {
   onUpdateBudgetConfig: (c: BudgetConfig) => void;
   onBack: () => void;
   getPartnerName: (p: "A" | "B") => string;
+}
+
+interface CategoryRowProps {
+  original: string;
+  display: string;
+  isCustom: boolean;
+  onRename: (newName: string) => void;
+  onDelete?: () => void;
+}
+
+function CategoryRow({ original, display, isCustom, onRename, onDelete }: CategoryRowProps) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(display);
+
+  const save = () => {
+    if (val.trim()) onRename(val.trim());
+    setEditing(false);
+  };
+
+  return (
+    <div className="flex items-center gap-2 rounded-xl bg-muted p-3">
+      {editing ? (
+        <Input
+          autoFocus
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && save()}
+          className="h-8 flex-1 text-sm"
+        />
+      ) : (
+        <span className="flex-1 text-sm truncate">{display}</span>
+      )}
+      <span className="text-[10px] text-muted-foreground uppercase">{isCustom ? "Custom" : "Default"}</span>
+      {editing ? (
+        <button onClick={save} className="text-primary"><Check className="h-4 w-4" /></button>
+      ) : (
+        <button onClick={() => { setVal(display); setEditing(true); }} className="text-muted-foreground hover:text-foreground"><Pencil className="h-3.5 w-3.5" /></button>
+      )}
+      {isCustom && onDelete && (
+        <button onClick={onDelete} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
+      )}
+    </div>
+  );
 }
 
 export default function SettingsView({
@@ -30,11 +74,16 @@ export default function SettingsView({
   const [monthlyB, setMonthlyB] = useState(String(budgetConfig.monthlyLimitB || ""));
   const [customExpense, setCustomExpense] = useState(budgetConfig.customExpenseCategories);
   const [customIncome, setCustomIncome] = useState(budgetConfig.customIncomeCategories);
+  const [renames, setRenames] = useState<Record<string, string>>(budgetConfig.categoryRenames || {});
   const [categoryLimits, setCategoryLimits] = useState<Record<string, number>>(budgetConfig.categoryLimits);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(budgetConfig.paymentMethods);
   const [newExpenseCat, setNewExpenseCat] = useState("");
   const [newIncomeCat, setNewIncomeCat] = useState("");
   const [newLimitCat, setNewLimitCat] = useState("");
   const [newLimitAmount, setNewLimitAmount] = useState("");
+  const [newPmName, setNewPmName] = useState("");
+  const [newPmIcon, setNewPmIcon] = useState("");
+  const [newPmFee, setNewPmFee] = useState(false);
 
   const handleSave = () => {
     onUpdateProfile({ partnerAName: nameA, partnerBName: nameB });
@@ -47,32 +96,59 @@ export default function SettingsView({
       monthlyLimitB: parseFloat(monthlyB) || 0,
       customExpenseCategories: customExpense,
       customIncomeCategories: customIncome,
+      categoryRenames: renames,
       categoryLimits,
+      paymentMethods,
     });
     onBack();
   };
 
+  const renameCategory = (original: string, newName: string) => {
+    if (newName === original) {
+      const next = { ...renames }; delete next[original]; setRenames(next);
+    } else {
+      setRenames({ ...renames, [original]: newName });
+    }
+  };
+  const displayName = (original: string) => renames[original] || original;
+
   const addCustomExpense = () => {
-    if (newExpenseCat.trim() && !customExpense.includes(newExpenseCat.trim())) {
-      setCustomExpense([...customExpense, newExpenseCat.trim()]);
+    const v = newExpenseCat.trim();
+    if (v && !customExpense.includes(v) && !DEFAULT_EXPENSE_CATEGORIES.includes(v as never)) {
+      setCustomExpense([...customExpense, v]);
       setNewExpenseCat("");
     }
   };
-
   const addCustomIncome = () => {
-    if (newIncomeCat.trim() && !customIncome.includes(newIncomeCat.trim())) {
-      setCustomIncome([...customIncome, newIncomeCat.trim()]);
+    const v = newIncomeCat.trim();
+    if (v && !customIncome.includes(v) && !DEFAULT_INCOME_CATEGORIES.includes(v as never)) {
+      setCustomIncome([...customIncome, v]);
       setNewIncomeCat("");
     }
   };
-
   const addCategoryLimit = () => {
     if (newLimitCat.trim() && newLimitAmount) {
       setCategoryLimits({ ...categoryLimits, [newLimitCat.trim()]: parseFloat(newLimitAmount) });
-      setNewLimitCat("");
-      setNewLimitAmount("");
+      setNewLimitCat(""); setNewLimitAmount("");
     }
   };
+
+  const addPaymentMethod = () => {
+    const name = newPmName.trim();
+    if (!name) return;
+    setPaymentMethods([
+      ...paymentMethods,
+      { id: crypto.randomUUID(), name, icon: newPmIcon.trim() || "💼", supportsFee: newPmFee },
+    ]);
+    setNewPmName(""); setNewPmIcon(""); setNewPmFee(false);
+  };
+  const updatePm = (id: string, patch: Partial<PaymentMethod>) => {
+    setPaymentMethods(paymentMethods.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  };
+  const removePm = (id: string) => setPaymentMethods(paymentMethods.filter((p) => p.id !== id));
+
+  const allExpense = [...DEFAULT_EXPENSE_CATEGORIES, ...customExpense];
+  const allIncome = [...DEFAULT_INCOME_CATEGORIES, ...customIncome];
 
   return (
     <motion.div
@@ -92,6 +168,7 @@ export default function SettingsView({
           <TabsTrigger value="profile" className="flex-1 text-xs">Profile</TabsTrigger>
           <TabsTrigger value="budget" className="flex-1 text-xs">Budget</TabsTrigger>
           <TabsTrigger value="categories" className="flex-1 text-xs">Categories</TabsTrigger>
+          <TabsTrigger value="payments" className="flex-1 text-xs">Payments</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
@@ -113,47 +190,26 @@ export default function SettingsView({
 
         <TabsContent value="budget">
           <div className="space-y-4">
-            {/* Daily Limits */}
             <div className="glass-card rounded-3xl p-6 space-y-4">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Wallet className="h-4 w-4 text-primary" />
                 <span>Daily Budget Limits</span>
               </div>
-              <div>
-                <Label>Shared Daily Limit</Label>
-                <Input type="number" min="0" step="1" placeholder="No limit" value={dailyShared} onChange={(e) => setDailyShared(e.target.value)} className="mt-1" />
-              </div>
-              <div>
-                <Label>{getPartnerName("A")}'s Daily Limit</Label>
-                <Input type="number" min="0" step="1" placeholder="No limit" value={dailyA} onChange={(e) => setDailyA(e.target.value)} className="mt-1" />
-              </div>
-              <div>
-                <Label>{getPartnerName("B")}'s Daily Limit</Label>
-                <Input type="number" min="0" step="1" placeholder="No limit" value={dailyB} onChange={(e) => setDailyB(e.target.value)} className="mt-1" />
-              </div>
+              <div><Label>Shared Daily Limit</Label><Input type="number" min="0" step="1" placeholder="No limit" value={dailyShared} onChange={(e) => setDailyShared(e.target.value)} className="mt-1" /></div>
+              <div><Label>{getPartnerName("A")}'s Daily Limit</Label><Input type="number" min="0" step="1" placeholder="No limit" value={dailyA} onChange={(e) => setDailyA(e.target.value)} className="mt-1" /></div>
+              <div><Label>{getPartnerName("B")}'s Daily Limit</Label><Input type="number" min="0" step="1" placeholder="No limit" value={dailyB} onChange={(e) => setDailyB(e.target.value)} className="mt-1" /></div>
             </div>
 
-            {/* Monthly Limits */}
             <div className="glass-card rounded-3xl p-6 space-y-4">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <CalendarDays className="h-4 w-4 text-accent" />
                 <span>Monthly Budget Limits</span>
               </div>
-              <div>
-                <Label>Shared Monthly Limit</Label>
-                <Input type="number" min="0" step="1" placeholder="No limit" value={monthlyShared} onChange={(e) => setMonthlyShared(e.target.value)} className="mt-1" />
-              </div>
-              <div>
-                <Label>{getPartnerName("A")}'s Monthly Limit</Label>
-                <Input type="number" min="0" step="1" placeholder="No limit" value={monthlyA} onChange={(e) => setMonthlyA(e.target.value)} className="mt-1" />
-              </div>
-              <div>
-                <Label>{getPartnerName("B")}'s Monthly Limit</Label>
-                <Input type="number" min="0" step="1" placeholder="No limit" value={monthlyB} onChange={(e) => setMonthlyB(e.target.value)} className="mt-1" />
-              </div>
+              <div><Label>Shared Monthly Limit</Label><Input type="number" min="0" step="1" placeholder="No limit" value={monthlyShared} onChange={(e) => setMonthlyShared(e.target.value)} className="mt-1" /></div>
+              <div><Label>{getPartnerName("A")}'s Monthly Limit</Label><Input type="number" min="0" step="1" placeholder="No limit" value={monthlyA} onChange={(e) => setMonthlyA(e.target.value)} className="mt-1" /></div>
+              <div><Label>{getPartnerName("B")}'s Monthly Limit</Label><Input type="number" min="0" step="1" placeholder="No limit" value={monthlyB} onChange={(e) => setMonthlyB(e.target.value)} className="mt-1" /></div>
             </div>
 
-            {/* Category Limits */}
             <div className="glass-card rounded-3xl p-6 space-y-4">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Tag className="h-4 w-4 text-accent" />
@@ -164,9 +220,7 @@ export default function SettingsView({
                   <span className="text-sm">{cat}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold">{formatCurrency(limit)}</span>
-                    <button onClick={() => { const next = { ...categoryLimits }; delete next[cat]; setCategoryLimits(next); }} className="text-muted-foreground">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                    <button onClick={() => { const next = { ...categoryLimits }; delete next[cat]; setCategoryLimits(next); }} className="text-muted-foreground"><X className="h-3.5 w-3.5" /></button>
                   </div>
                 </div>
               ))}
@@ -174,9 +228,7 @@ export default function SettingsView({
                 <Input placeholder="Category name (e.g. 🍔 Food & Dining)" value={newLimitCat} onChange={(e) => setNewLimitCat(e.target.value)} />
                 <div className="flex gap-2">
                   <Input type="number" min="0" step="1" placeholder="Monthly limit" value={newLimitAmount} onChange={(e) => setNewLimitAmount(e.target.value)} className="flex-1" />
-                  <Button size="sm" variant="secondary" onClick={addCategoryLimit}>
-                    <Plus className="h-4 w-4" />
-                  </Button>
+                  <Button size="sm" variant="secondary" onClick={addCategoryLimit}><Plus className="h-4 w-4" /></Button>
                 </div>
               </div>
             </div>
@@ -185,45 +237,82 @@ export default function SettingsView({
 
         <TabsContent value="categories">
           <div className="space-y-4">
-            <div className="glass-card rounded-3xl p-6 space-y-4">
+            <div className="glass-card rounded-3xl p-6 space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Tag className="h-4 w-4 text-expense" />
-                <span>Custom Expense Categories</span>
+                <span>Expense Categories ({allExpense.length})</span>
               </div>
-              {customExpense.map((c) => (
-                <div key={c} className="flex items-center justify-between rounded-xl bg-muted p-3">
-                  <span className="text-sm">{c}</span>
-                  <button onClick={() => setCustomExpense(customExpense.filter((x) => x !== c))} className="text-muted-foreground">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+              {allExpense.map((c) => (
+                <CategoryRow
+                  key={c}
+                  original={c}
+                  display={displayName(c)}
+                  isCustom={customExpense.includes(c)}
+                  onRename={(name) => renameCategory(c, name)}
+                  onDelete={customExpense.includes(c) ? () => setCustomExpense(customExpense.filter((x) => x !== c)) : undefined}
+                />
               ))}
-              <div className="flex gap-2">
+              <div className="flex gap-2 pt-2">
                 <Input placeholder="e.g. 🐕 Pet Care" value={newExpenseCat} onChange={(e) => setNewExpenseCat(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCustomExpense()} className="flex-1" />
-                <Button size="sm" variant="secondary" onClick={addCustomExpense}>
-                  <Plus className="h-4 w-4" />
-                </Button>
+                <Button size="sm" variant="secondary" onClick={addCustomExpense}><Plus className="h-4 w-4" /></Button>
               </div>
             </div>
 
-            <div className="glass-card rounded-3xl p-6 space-y-4">
+            <div className="glass-card rounded-3xl p-6 space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Tag className="h-4 w-4 text-income" />
-                <span>Custom Income Categories</span>
+                <span>Income Categories ({allIncome.length})</span>
               </div>
-              {customIncome.map((c) => (
-                <div key={c} className="flex items-center justify-between rounded-xl bg-muted p-3">
-                  <span className="text-sm">{c}</span>
-                  <button onClick={() => setCustomIncome(customIncome.filter((x) => x !== c))} className="text-muted-foreground">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+              {allIncome.map((c) => (
+                <CategoryRow
+                  key={c}
+                  original={c}
+                  display={displayName(c)}
+                  isCustom={customIncome.includes(c)}
+                  onRename={(name) => renameCategory(c, name)}
+                  onDelete={customIncome.includes(c) ? () => setCustomIncome(customIncome.filter((x) => x !== c)) : undefined}
+                />
               ))}
-              <div className="flex gap-2">
+              <div className="flex gap-2 pt-2">
                 <Input placeholder="e.g. 🏘 Rental Income" value={newIncomeCat} onChange={(e) => setNewIncomeCat(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCustomIncome()} className="flex-1" />
-                <Button size="sm" variant="secondary" onClick={addCustomIncome}>
-                  <Plus className="h-4 w-4" />
-                </Button>
+                <Button size="sm" variant="secondary" onClick={addCustomIncome}><Plus className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="payments">
+          <div className="glass-card rounded-3xl p-6 space-y-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CreditCard className="h-4 w-4 text-primary" />
+              <span>Payment Methods</span>
+            </div>
+            <p className="text-xs text-muted-foreground">Toggle "Fee" for methods like M-Pesa or bank transfers that may charge transaction costs.</p>
+            {paymentMethods.map((pm) => (
+              <div key={pm.id} className="rounded-xl bg-muted p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Input value={pm.icon || ""} onChange={(e) => updatePm(pm.id, { icon: e.target.value })} className="h-9 w-12 text-center" maxLength={2} />
+                  <Input value={pm.name} onChange={(e) => updatePm(pm.id, { name: e.target.value })} className="h-9 flex-1" />
+                  <button onClick={() => removePm(pm.id)} className="text-muted-foreground hover:text-destructive"><X className="h-4 w-4" /></button>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Charges transaction fee</span>
+                  <Switch checked={pm.supportsFee} onCheckedChange={(v) => updatePm(pm.id, { supportsFee: v })} />
+                </div>
+              </div>
+            ))}
+            <div className="space-y-2 pt-2 border-t border-border">
+              <Label className="text-xs">Add new method</Label>
+              <div className="flex gap-2">
+                <Input placeholder="🏦" value={newPmIcon} onChange={(e) => setNewPmIcon(e.target.value)} className="w-12 text-center" maxLength={2} />
+                <Input placeholder="Method name" value={newPmName} onChange={(e) => setNewPmName(e.target.value)} className="flex-1" />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Has transaction fee</span>
+                <div className="flex items-center gap-2">
+                  <Switch checked={newPmFee} onCheckedChange={setNewPmFee} />
+                  <Button size="sm" variant="secondary" onClick={addPaymentMethod}><Plus className="h-4 w-4" /></Button>
+                </div>
               </div>
             </div>
           </div>
