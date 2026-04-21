@@ -178,19 +178,19 @@ export default function StatsView({
   const dailyComparison = useMemo(() => {
     const todayStr = format(new Date(), "yyyy-MM-dd");
     const yesterdayStr = format(subDays(new Date(), 1), "yyyy-MM-dd");
-    const today = allTransactions
+    const today = safeTransactions
       .filter((t) => t.type === "expense" && t.date.startsWith(todayStr))
       .reduce((s, t) => s + t.amount, 0);
-    const yesterday = allTransactions
+    const yesterday = safeTransactions
       .filter((t) => t.type === "expense" && t.date.startsWith(yesterdayStr))
       .reduce((s, t) => s + t.amount, 0);
     const last7 = eachDayOfInterval({ start: subDays(new Date(), 6), end: new Date() })
-      .map((d) => allTransactions
+      .map((d) => safeTransactions
         .filter((t) => t.type === "expense" && t.date.startsWith(format(d, "yyyy-MM-dd")))
         .reduce((s, t) => s + t.amount, 0));
     const avg7 = last7.reduce((a, b) => a + b, 0) / 7;
     return { today, yesterday, avg7 };
-  }, [allTransactions]);
+  }, [safeTransactions]);
 
   // Partner breakdown by category (top 5)
   const partnerByCategory = useMemo(() => {
