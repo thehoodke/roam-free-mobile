@@ -15,6 +15,7 @@ type View = "home" | "settings" | "stats";
 const Index = () => {
   const store = useBudgetStore();
   const {
+    transactions,
     profile,
     budgetConfig,
     addTransaction,
@@ -72,6 +73,8 @@ const Index = () => {
         getPaymentMethod={getPaymentMethod}
         budgetConfig={budgetConfig}
         onBack={() => setView("home")}
+        allTransactions={transactions}
+        displayCategory={displayCategory}
       />
     );
   }
