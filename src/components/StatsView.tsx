@@ -59,8 +59,9 @@ const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
 export default function StatsView({
   monthKey, monthLabel, monthTransactions, getDayExpenses, getMonthExpenses,
   getPartnerName, getPaymentMethod, budgetConfig, onBack,
-  allTransactions, displayCategory,
+  allTransactions = [], displayCategory = (c: string) => c,
 }: StatsViewProps) {
+  const safeTransactions = allTransactions ?? [];
   const [period, setPeriod] = useState<PeriodKey>("month");
   const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>({});
 
