@@ -103,11 +103,11 @@ export default function StatsView({
 
   // Filter transactions to selected range
   const periodTx = useMemo(() => {
-    return allTransactions.filter((t) => {
+    return safeTransactions.filter((t) => {
       const d = parseISO(t.date);
       return isWithinInterval(d, { start: rangeStart, end: rangeEnd });
     });
-  }, [allTransactions, rangeStart, rangeEnd]);
+  }, [safeTransactions, rangeStart, rangeEnd]);
 
   const expenseTx = useMemo(() => periodTx.filter((t) => t.type === "expense"), [periodTx]);
   const incomeTx = useMemo(() => periodTx.filter((t) => t.type === "income"), [periodTx]);
