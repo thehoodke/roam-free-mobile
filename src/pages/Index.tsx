@@ -73,6 +73,8 @@ const Index = () => {
         getPaymentMethod={getPaymentMethod}
         budgetConfig={budgetConfig}
         onBack={() => setView("home")}
+        allTransactions={transactions}
+        displayCategory={displayCategory}
       />
     );
   }
