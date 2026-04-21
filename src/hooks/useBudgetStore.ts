@@ -4,6 +4,7 @@ import {
   CoupleProfile,
   Partner,
   BudgetConfig,
+  PaymentMethod,
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_INCOME_CATEGORIES,
   DEFAULT_PAYMENT_METHODS,
@@ -27,6 +28,23 @@ function loadFromStorage<T>(key: string, fallback: T): T {
 
 function saveToStorage<T>(key: string, value: T) {
   localStorage.setItem(key, JSON.stringify(value));
+}
+
+function normalizePaymentMethods(stored?: PaymentMethod[]) {
+  const safeStored = Array.isArray(stored)
+    ? stored.filter((method): method is PaymentMethod => Boolean(method?.id && method.name))
+    : [];
+
+  const storedMap = new Map(safeStored.map((method) => [method.id, method]));
+  const mergedDefaults = DEFAULT_PAYMENT_METHODS.map((method) => ({
+    ...method,
+    ...storedMap.get(method.id),
+  }));
+  const customMethods = safeStored.filter(
+    (method) => !DEFAULT_PAYMENT_METHODS.some((defaultMethod) => defaultMethod.id === method.id)
+  );
+
+  return [...mergedDefaults, ...customMethods];
 }
 
 const defaultProfile: CoupleProfile = {
@@ -57,7 +75,11 @@ export function useBudgetStore() {
   );
   const [budgetConfig, setBudgetConfig] = useState<BudgetConfig>(() => {
     const loaded = loadFromStorage<Partial<BudgetConfig>>(STORAGE_KEYS.BUDGET_CONFIG, {});
-    return { ...defaultConfig, ...loaded } as BudgetConfig;
+    return {
+      ...defaultConfig,
+      ...loaded,
+      paymentMethods: normalizePaymentMethods(loaded.paymentMethods),
+    } as BudgetConfig;
   });
 
   useEffect(() => {

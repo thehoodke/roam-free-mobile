@@ -72,6 +72,7 @@ export const DEFAULT_PAYMENT_METHODS: PaymentMethod[] = [
   { id: "cash", name: "Cash", icon: "💵", supportsFee: false },
   { id: "mpesa", name: "M-Pesa", icon: "📱", supportsFee: true },
   { id: "bank", name: "Bank Transfer", icon: "🏦", supportsFee: true },
+  { id: "transfer", name: "Money Transfer", icon: "↔️", supportsFee: true },
   { id: "card", name: "Card", icon: "💳", supportsFee: false },
 ];
 
