@@ -15,6 +15,7 @@ type View = "home" | "settings" | "stats";
 const Index = () => {
   const store = useBudgetStore();
   const {
+    transactions,
     profile,
     budgetConfig,
     addTransaction,
