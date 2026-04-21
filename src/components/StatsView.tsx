@@ -230,7 +230,7 @@ export default function StatsView({
   const monthB = getMonthExpenses(monthKey, "B");
 
   const categoryLimitEntries = useMemo(
-    () => Object.entries(budgetConfig.categoryLimits).map(([cat, limit]) => {
+    () => Object.entries(budgetConfig.categoryLimits ?? {}).map(([cat, limit]) => {
       const display = displayCategory(cat);
       const spent = categorySpending[display] || 0;
       return {
