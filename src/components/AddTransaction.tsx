@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,17 @@ export default function AddTransaction({
     () => paymentMethods.find((p) => p.id === paymentMethodId),
     [paymentMethods, paymentMethodId]
   );
+
+  useEffect(() => {
+    if (!paymentMethods.length) {
+      setPaymentMethodId("");
+      return;
+    }
+
+    if (!paymentMethods.some((method) => method.id === paymentMethodId)) {
+      setPaymentMethodId(paymentMethods[0].id);
+    }
+  }, [paymentMethodId, paymentMethods]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,18 +165,35 @@ export default function AddTransaction({
 
                 <div>
                   <Label>Payment Method</Label>
-                  <Select value={paymentMethodId} onValueChange={(v) => { setPaymentMethodId(v); setTransactionCost(""); }}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Select payment method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {paymentMethods.map((pm) => (
-                        <SelectItem key={pm.id} value={pm.id}>
-                          {pm.icon} {pm.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {paymentMethods.map((pm) => {
+                      const isActive = pm.id === paymentMethodId;
+
+                      return (
+                        <button
+                          key={pm.id}
+                          type="button"
+                          onClick={() => {
+                            setPaymentMethodId(pm.id);
+                            setTransactionCost("");
+                          }}
+                          className={`rounded-xl border px-3 py-3 text-left transition-colors ${
+                            isActive
+                              ? "border-primary bg-primary/10 text-foreground"
+                              : "border-border bg-card text-muted-foreground"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                            <span className="text-base">{pm.icon}</span>
+                            <span className="truncate">{pm.name}</span>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {pm.supportsFee ? "Supports fee tracking" : "No transaction fee"}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {selectedPm?.supportsFee && (

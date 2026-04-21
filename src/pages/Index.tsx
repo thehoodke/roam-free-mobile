@@ -62,12 +62,14 @@ const Index = () => {
       <StatsView
         monthKey={monthKey}
         monthLabel={monthLabel}
+        monthTransactions={monthTransactions}
         getCategorySpending={getCategorySpending}
         getPartnerSpending={getPartnerSpending}
         getDailyTrend={getDailyTrend}
         getDayExpenses={getDayExpenses}
         getMonthExpenses={getMonthExpenses}
         getPartnerName={getPartnerName}
+        getPaymentMethod={getPaymentMethod}
         budgetConfig={budgetConfig}
         onBack={() => setView("home")}
       />
