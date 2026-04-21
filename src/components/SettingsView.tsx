@@ -85,67 +85,155 @@ export default function SettingsView({
   const [newPmIcon, setNewPmIcon] = useState("");
   const [newPmFee, setNewPmFee] = useState(false);
 
+  const buildBudgetConfig = (overrides: Partial<BudgetConfig> = {}): BudgetConfig => ({
+    dailyLimitShared: parseFloat(dailyShared) || 0,
+    dailyLimitA: parseFloat(dailyA) || 0,
+    dailyLimitB: parseFloat(dailyB) || 0,
+    monthlyLimitShared: parseFloat(monthlyShared) || 0,
+    monthlyLimitA: parseFloat(monthlyA) || 0,
+    monthlyLimitB: parseFloat(monthlyB) || 0,
+    customExpenseCategories: customExpense,
+    customIncomeCategories: customIncome,
+    categoryRenames: renames,
+    categoryLimits,
+    paymentMethods,
+    ...overrides,
+  });
+
+  const persistBudgetConfig = (overrides: Partial<BudgetConfig> = {}) => {
+    onUpdateBudgetConfig(buildBudgetConfig(overrides));
+  };
+
   const handleSave = () => {
     onUpdateProfile({ partnerAName: nameA, partnerBName: nameB });
-    onUpdateBudgetConfig({
-      dailyLimitShared: parseFloat(dailyShared) || 0,
-      dailyLimitA: parseFloat(dailyA) || 0,
-      dailyLimitB: parseFloat(dailyB) || 0,
-      monthlyLimitShared: parseFloat(monthlyShared) || 0,
-      monthlyLimitA: parseFloat(monthlyA) || 0,
-      monthlyLimitB: parseFloat(monthlyB) || 0,
-      customExpenseCategories: customExpense,
-      customIncomeCategories: customIncome,
-      categoryRenames: renames,
-      categoryLimits,
-      paymentMethods,
-    });
+    onUpdateBudgetConfig(buildBudgetConfig());
     onBack();
   };
 
-  const renameCategory = (original: string, newName: string) => {
-    if (newName === original) {
-      const next = { ...renames }; delete next[original]; setRenames(next);
+  const relinkRenames = (current: Record<string, string>, from: string, to: string) => {
+    const next = Object.fromEntries(
+      Object.entries(current).map(([key, value]) => [key, value === from ? to : value])
+    );
+    if (to === from) {
+      delete next[from];
     } else {
-      setRenames({ ...renames, [original]: newName });
+      next[from] = to;
     }
+    return next;
   };
+
+  const renameCategory = (original: string, newName: string, kind: "expense" | "income", isCustom: boolean) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+
+    if (!isCustom) {
+      const nextRenames = trimmed === original
+        ? Object.fromEntries(Object.entries(renames).filter(([key]) => key !== original))
+        : { ...renames, [original]: trimmed };
+      setRenames(nextRenames);
+      persistBudgetConfig({ categoryRenames: nextRenames });
+      return;
+    }
+
+    const list = kind === "expense" ? customExpense : customIncome;
+    if (trimmed !== original && list.includes(trimmed)) return;
+
+    const nextList = list.map((item) => (item === original ? trimmed : item));
+    const nextExpense = kind === "expense" ? nextList : customExpense;
+    const nextIncome = kind === "income" ? nextList : customIncome;
+    const nextRenames = relinkRenames(renames, original, trimmed);
+    const nextCategoryLimits = { ...categoryLimits };
+
+    if (original !== trimmed && nextCategoryLimits[original] !== undefined) {
+      nextCategoryLimits[trimmed] = nextCategoryLimits[original];
+      delete nextCategoryLimits[original];
+    }
+
+    setCustomExpense(nextExpense);
+    setCustomIncome(nextIncome);
+    setRenames(nextRenames);
+    setCategoryLimits(nextCategoryLimits);
+    persistBudgetConfig({
+      customExpenseCategories: nextExpense,
+      customIncomeCategories: nextIncome,
+      categoryRenames: nextRenames,
+      categoryLimits: nextCategoryLimits,
+    });
+  };
+
   const displayName = (original: string) => renames[original] || original;
 
   const addCustomExpense = () => {
     const v = newExpenseCat.trim();
     if (v && !customExpense.includes(v) && !DEFAULT_EXPENSE_CATEGORIES.includes(v as never)) {
-      setCustomExpense([...customExpense, v]);
+      const next = [...customExpense, v];
+      setCustomExpense(next);
+      persistBudgetConfig({ customExpenseCategories: next });
       setNewExpenseCat("");
     }
   };
   const addCustomIncome = () => {
     const v = newIncomeCat.trim();
     if (v && !customIncome.includes(v) && !DEFAULT_INCOME_CATEGORIES.includes(v as never)) {
-      setCustomIncome([...customIncome, v]);
+      const next = [...customIncome, v];
+      setCustomIncome(next);
+      persistBudgetConfig({ customIncomeCategories: next });
       setNewIncomeCat("");
     }
   };
   const addCategoryLimit = () => {
     if (newLimitCat.trim() && newLimitAmount) {
-      setCategoryLimits({ ...categoryLimits, [newLimitCat.trim()]: parseFloat(newLimitAmount) });
+      const next = { ...categoryLimits, [newLimitCat.trim()]: parseFloat(newLimitAmount) };
+      setCategoryLimits(next);
+      persistBudgetConfig({ categoryLimits: next });
       setNewLimitCat(""); setNewLimitAmount("");
     }
+  };
+
+  const deleteCategory = (category: string, kind: "expense" | "income") => {
+    const nextExpense = kind === "expense"
+      ? customExpense.filter((item) => item !== category)
+      : customExpense;
+    const nextIncome = kind === "income"
+      ? customIncome.filter((item) => item !== category)
+      : customIncome;
+    const nextRenames = Object.fromEntries(Object.entries(renames).filter(([key]) => key !== category));
+    const nextCategoryLimits = { ...categoryLimits };
+    delete nextCategoryLimits[category];
+
+    setCustomExpense(nextExpense);
+    setCustomIncome(nextIncome);
+    setRenames(nextRenames);
+    setCategoryLimits(nextCategoryLimits);
+    persistBudgetConfig({
+      customExpenseCategories: nextExpense,
+      customIncomeCategories: nextIncome,
+      categoryRenames: nextRenames,
+      categoryLimits: nextCategoryLimits,
+    });
   };
 
   const addPaymentMethod = () => {
     const name = newPmName.trim();
     if (!name) return;
-    setPaymentMethods([
+    const next = [
       ...paymentMethods,
       { id: crypto.randomUUID(), name, icon: newPmIcon.trim() || "💼", supportsFee: newPmFee },
-    ]);
+    ];
+    setPaymentMethods(next);
+    persistBudgetConfig({ paymentMethods: next });
     setNewPmName(""); setNewPmIcon(""); setNewPmFee(false);
   };
   const updatePm = (id: string, patch: Partial<PaymentMethod>) => {
-    setPaymentMethods(paymentMethods.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+    const next = paymentMethods.map((p) => (p.id === id ? { ...p, ...patch } : p));
+    setPaymentMethods(next);
+    persistBudgetConfig({ paymentMethods: next });
   };
-  const removePm = (id: string) => setPaymentMethods(paymentMethods.filter((p) => p.id !== id));
+  const removePm = (id: string) => {
+    const next = paymentMethods.filter((p) => p.id !== id);
+    setPaymentMethods(next);
+    persistBudgetConfig({ paymentMethods: next });
+  };
 
   const allExpense = [...DEFAULT_EXPENSE_CATEGORIES, ...customExpense];
   const allIncome = [...DEFAULT_INCOME_CATEGORIES, ...customIncome];
@@ -242,14 +330,15 @@ export default function SettingsView({
                 <Tag className="h-4 w-4 text-expense" />
                 <span>Expense Categories ({allExpense.length})</span>
               </div>
+              <p className="text-xs text-muted-foreground">Add, rename, or delete categories here. Category changes save immediately.</p>
               {allExpense.map((c) => (
                 <CategoryRow
                   key={c}
                   original={c}
                   display={displayName(c)}
                   isCustom={customExpense.includes(c)}
-                  onRename={(name) => renameCategory(c, name)}
-                  onDelete={customExpense.includes(c) ? () => setCustomExpense(customExpense.filter((x) => x !== c)) : undefined}
+                  onRename={(name) => renameCategory(c, name, "expense", customExpense.includes(c))}
+                  onDelete={customExpense.includes(c) ? () => deleteCategory(c, "expense") : undefined}
                 />
               ))}
               <div className="flex gap-2 pt-2">
@@ -263,14 +352,15 @@ export default function SettingsView({
                 <Tag className="h-4 w-4 text-income" />
                 <span>Income Categories ({allIncome.length})</span>
               </div>
+              <p className="text-xs text-muted-foreground">Custom categories are editable, and renamed labels are used across the app.</p>
               {allIncome.map((c) => (
                 <CategoryRow
                   key={c}
                   original={c}
                   display={displayName(c)}
                   isCustom={customIncome.includes(c)}
-                  onRename={(name) => renameCategory(c, name)}
-                  onDelete={customIncome.includes(c) ? () => setCustomIncome(customIncome.filter((x) => x !== c)) : undefined}
+                  onRename={(name) => renameCategory(c, name, "income", customIncome.includes(c))}
+                  onDelete={customIncome.includes(c) ? () => deleteCategory(c, "income") : undefined}
                 />
               ))}
               <div className="flex gap-2 pt-2">
@@ -287,7 +377,7 @@ export default function SettingsView({
               <CreditCard className="h-4 w-4 text-primary" />
               <span>Payment Methods</span>
             </div>
-            <p className="text-xs text-muted-foreground">Toggle "Fee" for methods like M-Pesa or bank transfers that may charge transaction costs.</p>
+            <p className="text-xs text-muted-foreground">Toggle "Fee" for methods like M-Pesa, bank transfers, or money transfer services. Payment changes save immediately.</p>
             {paymentMethods.map((pm) => (
               <div key={pm.id} className="rounded-xl bg-muted p-3 space-y-2">
                 <div className="flex items-center gap-2">

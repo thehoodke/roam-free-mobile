@@ -7,18 +7,20 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart as RPieChart, Pie, Cell, Legend,
 } from "recharts";
-import { Partner, BudgetConfig } from "@/types/budget";
+import { Partner, BudgetConfig, PaymentMethod, Transaction } from "@/types/budget";
 import { formatCurrency } from "@/lib/currency";
 
 interface StatsViewProps {
   monthKey: string;
   monthLabel: string;
+  monthTransactions: Transaction[];
   getCategorySpending: (month: string) => Record<string, number>;
   getPartnerSpending: (month: string) => { A: number; B: number; total: number };
   getDailyTrend: (days?: number) => { date: string; label: string; income: number; expenses: number }[];
   getDayExpenses: (date: string, partner?: Partner) => number;
   getMonthExpenses: (month: string, partner?: Partner) => number;
   getPartnerName: (p: Partner) => string;
+  getPaymentMethod: (id?: string) => PaymentMethod | undefined;
   budgetConfig: BudgetConfig;
   onBack: () => void;
 }
@@ -31,8 +33,8 @@ const CHART_COLORS = [
 ];
 
 export default function StatsView({
-  monthKey, monthLabel, getCategorySpending, getPartnerSpending,
-  getDailyTrend, getDayExpenses, getMonthExpenses, getPartnerName, budgetConfig, onBack,
+  monthKey, monthLabel, monthTransactions, getCategorySpending, getPartnerSpending,
+  getDailyTrend, getDayExpenses, getMonthExpenses, getPartnerName, getPaymentMethod, budgetConfig, onBack,
 }: StatsViewProps) {
   const categorySpending = useMemo(() => getCategorySpending(monthKey), [monthKey, getCategorySpending]);
   const partnerSpending = useMemo(() => getPartnerSpending(monthKey), [monthKey, getPartnerSpending]);
@@ -59,6 +61,27 @@ export default function StatsView({
     })),
     [budgetConfig.categoryLimits, categorySpending]
   );
+  const feeTransactions = useMemo(
+    () => monthTransactions.filter((transaction) => transaction.isFee),
+    [monthTransactions]
+  );
+  const feeTotal = useMemo(
+    () => feeTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+    [feeTransactions]
+  );
+  const feeAverage = feeTransactions.length > 0 ? feeTotal / feeTransactions.length : 0;
+  const feeByMethod = useMemo(() => {
+    const grouped = feeTransactions.reduce<Record<string, number>>((acc, transaction) => {
+      const method = getPaymentMethod(transaction.paymentMethodId);
+      const label = method ? `${method.icon} ${method.name}` : "Other";
+      acc[label] = (acc[label] || 0) + transaction.amount;
+      return acc;
+    }, {});
+
+    return Object.entries(grouped)
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total);
+  }, [feeTransactions, getPaymentMethod]);
 
   const partnerAPercent = partnerSpending.total > 0 ? (partnerSpending.A / partnerSpending.total) * 100 : 50;
 
@@ -175,6 +198,38 @@ export default function StatsView({
           )}
         </div>
       </div>
+
+      {feeTransactions.length > 0 && (
+        <div className="glass-card rounded-3xl p-5 mb-4">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <Target className="h-4 w-4 text-primary" />
+            Transaction Costs
+          </div>
+          <div className="mb-4 grid grid-cols-3 gap-3">
+            <div className="rounded-2xl bg-muted p-3">
+              <p className="text-[11px] text-muted-foreground">Total fees</p>
+              <p className="mt-1 text-sm font-semibold">{formatCurrency(feeTotal)}</p>
+            </div>
+            <div className="rounded-2xl bg-muted p-3">
+              <p className="text-[11px] text-muted-foreground">Charged txns</p>
+              <p className="mt-1 text-sm font-semibold">{feeTransactions.length}</p>
+            </div>
+            <div className="rounded-2xl bg-muted p-3">
+              <p className="text-[11px] text-muted-foreground">Average fee</p>
+              <p className="mt-1 text-sm font-semibold">{formatCurrency(feeAverage)}</p>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={feeByMethod}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-12} textAnchor="end" height={48} />
+              <YAxis tick={{ fontSize: 10 }} width={40} />
+              <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={{ borderRadius: 12, fontSize: 12, border: "none" }} />
+              <Bar dataKey="total" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* Category Breakdown */}
       {pieData.length > 0 && (
