@@ -59,8 +59,9 @@ const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
 export default function StatsView({
   monthKey, monthLabel, monthTransactions, getDayExpenses, getMonthExpenses,
   getPartnerName, getPaymentMethod, budgetConfig, onBack,
-  allTransactions, displayCategory,
+  allTransactions = [], displayCategory = (c: string) => c,
 }: StatsViewProps) {
+  const safeTransactions = allTransactions ?? [];
   const [period, setPeriod] = useState<PeriodKey>("month");
   const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>({});
 
@@ -102,11 +103,11 @@ export default function StatsView({
 
   // Filter transactions to selected range
   const periodTx = useMemo(() => {
-    return allTransactions.filter((t) => {
+    return safeTransactions.filter((t) => {
       const d = parseISO(t.date);
       return isWithinInterval(d, { start: rangeStart, end: rangeEnd });
     });
-  }, [allTransactions, rangeStart, rangeEnd]);
+  }, [safeTransactions, rangeStart, rangeEnd]);
 
   const expenseTx = useMemo(() => periodTx.filter((t) => t.type === "expense"), [periodTx]);
   const incomeTx = useMemo(() => periodTx.filter((t) => t.type === "income"), [periodTx]);
@@ -177,19 +178,19 @@ export default function StatsView({
   const dailyComparison = useMemo(() => {
     const todayStr = format(new Date(), "yyyy-MM-dd");
     const yesterdayStr = format(subDays(new Date(), 1), "yyyy-MM-dd");
-    const today = allTransactions
+    const today = safeTransactions
       .filter((t) => t.type === "expense" && t.date.startsWith(todayStr))
       .reduce((s, t) => s + t.amount, 0);
-    const yesterday = allTransactions
+    const yesterday = safeTransactions
       .filter((t) => t.type === "expense" && t.date.startsWith(yesterdayStr))
       .reduce((s, t) => s + t.amount, 0);
     const last7 = eachDayOfInterval({ start: subDays(new Date(), 6), end: new Date() })
-      .map((d) => allTransactions
+      .map((d) => safeTransactions
         .filter((t) => t.type === "expense" && t.date.startsWith(format(d, "yyyy-MM-dd")))
         .reduce((s, t) => s + t.amount, 0));
     const avg7 = last7.reduce((a, b) => a + b, 0) / 7;
     return { today, yesterday, avg7 };
-  }, [allTransactions]);
+  }, [safeTransactions]);
 
   // Partner breakdown by category (top 5)
   const partnerByCategory = useMemo(() => {
@@ -229,7 +230,7 @@ export default function StatsView({
   const monthB = getMonthExpenses(monthKey, "B");
 
   const categoryLimitEntries = useMemo(
-    () => Object.entries(budgetConfig.categoryLimits).map(([cat, limit]) => {
+    () => Object.entries(budgetConfig.categoryLimits ?? {}).map(([cat, limit]) => {
       const display = displayCategory(cat);
       const spent = categorySpending[display] || 0;
       return {
