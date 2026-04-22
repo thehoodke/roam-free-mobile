@@ -626,6 +626,87 @@ export default function StatsView({
         )}
       </div>
 
+      {/* Period-over-Period Change */}
+      {periodChange && (periodChange.expChange !== null || periodChange.incChange !== null) && (
+        <div className="glass-card rounded-3xl p-5 mb-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+            <ArrowUpDown className="h-4 w-4 text-primary" />
+            Vs Previous Period
+          </div>
+          <p className="mb-3 text-[11px] text-muted-foreground">{periodChange.prevLabel}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-2xl bg-muted p-3">
+              <p className="text-[11px] text-muted-foreground">Expenses</p>
+              <p className="mt-1 text-sm font-semibold">{formatCurrency(periodChange.prevExpenses)}</p>
+              {periodChange.expChange !== null && (
+                <p className={cn("mt-0.5 text-[11px] font-semibold", periodChange.expChange > 0 ? "text-expense" : "text-income")}>
+                  {periodChange.expChange > 0 ? "▲" : "▼"} {Math.abs(periodChange.expChange).toFixed(0)}%
+                </p>
+              )}
+            </div>
+            <div className="rounded-2xl bg-muted p-3">
+              <p className="text-[11px] text-muted-foreground">Income</p>
+              <p className="mt-1 text-sm font-semibold">{formatCurrency(periodChange.prevIncome)}</p>
+              {periodChange.incChange !== null && (
+                <p className={cn("mt-0.5 text-[11px] font-semibold", periodChange.incChange >= 0 ? "text-income" : "text-expense")}>
+                  {periodChange.incChange >= 0 ? "▲" : "▼"} {Math.abs(periodChange.incChange).toFixed(0)}%
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Income Breakdown */}
+      {incomeByCategory.length > 0 && (
+        <div className="glass-card rounded-3xl p-5 mb-4">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <Wallet className="h-4 w-4 text-income" />
+            Income Breakdown
+          </div>
+          <div className="space-y-2">
+            {incomeByCategory.map((c, i) => {
+              const pct = totalIncome > 0 ? (c.value / totalIncome) * 100 : 0;
+              return (
+                <div key={c.name} className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="truncate">
+                      <span className="text-muted-foreground mr-1">#{i + 1}</span>
+                      {c.name}
+                    </span>
+                    <span className="font-semibold">{formatCurrency(c.value)} · {pct.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {partnerIncome.total > 0 && (
+            <div className="mt-5 space-y-2">
+              <p className="text-xs text-muted-foreground">By partner</p>
+              <div className="flex justify-between text-xs">
+                <span>{getPartnerName("A")}</span>
+                <span>{getPartnerName("B")}</span>
+              </div>
+              <div className="flex h-4 rounded-full overflow-hidden bg-muted">
+                <div className="bg-partner-a transition-all" style={{ width: `${partnerIncomeAPercent}%` }} />
+                <div className="bg-partner-b transition-all" style={{ width: `${100 - partnerIncomeAPercent}%` }} />
+              </div>
+              <div className="flex justify-between text-xs font-semibold">
+                <span className="partner-a">{formatCurrency(partnerIncome.A)}</span>
+                <span className="partner-b">{formatCurrency(partnerIncome.B)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Category Ranking */}
       {rankedCategories.length > 0 && (
         <div className="glass-card rounded-3xl p-5 mb-4">
