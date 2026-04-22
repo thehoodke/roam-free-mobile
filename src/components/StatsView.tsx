@@ -222,6 +222,107 @@ export default function StatsView({
     return Object.entries(grouped).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
   }, [feeTransactions, getPaymentMethod]);
 
+  // Income by category & by partner
+  const incomeByCategory = useMemo(() => {
+    const map: Record<string, number> = {};
+    incomeTx.forEach((t) => {
+      const name = displayCategory(t.category);
+      map[name] = (map[name] || 0) + t.amount;
+    });
+    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [incomeTx, displayCategory]);
+
+  const partnerIncome = useMemo(() => {
+    const a = incomeTx.filter((t) => t.partner === "A").reduce((s, t) => s + t.amount, 0);
+    const b = incomeTx.filter((t) => t.partner === "B").reduce((s, t) => s + t.amount, 0);
+    return { A: a, B: b, total: a + b };
+  }, [incomeTx]);
+
+  const partnerIncomeAPercent = partnerIncome.total > 0
+    ? (partnerIncome.A / partnerIncome.total) * 100 : 50;
+
+  // Payment-method usage (expenses only, excluding fee entries)
+  const methodUsage = useMemo(() => {
+    const map: Record<string, { count: number; total: number; label: string }> = {};
+    expenseTx.filter((t) => !t.isFee).forEach((t) => {
+      const m = getPaymentMethod(t.paymentMethodId);
+      const key = m?.id || "unknown";
+      const label = m ? `${m.icon ?? ""} ${m.name}`.trim() : "Unspecified";
+      if (!map[key]) map[key] = { count: 0, total: 0, label };
+      map[key].count += 1;
+      map[key].total += t.amount;
+    });
+    return Object.values(map).sort((a, b) => b.total - a.total);
+  }, [expenseTx, getPaymentMethod]);
+
+  // Largest single transactions (top 5)
+  const topTransactions = useMemo(
+    () => [...expenseTx].filter((t) => !t.isFee).sort((a, b) => b.amount - a.amount).slice(0, 5),
+    [expenseTx]
+  );
+
+  // Weekday vs weekend
+  const weekdayWeekend = useMemo(() => {
+    let weekdayTotal = 0, weekendTotal = 0;
+    const weekdayDays = new Set<string>(), weekendDays = new Set<string>();
+    expenseTx.forEach((t) => {
+      const d = parseISO(t.date);
+      const dow = getDay(d); // 0=Sun, 6=Sat
+      const dayKey = format(d, "yyyy-MM-dd");
+      if (dow === 0 || dow === 6) {
+        weekendTotal += t.amount;
+        weekendDays.add(dayKey);
+      } else {
+        weekdayTotal += t.amount;
+        weekdayDays.add(dayKey);
+      }
+    });
+    const weekdayAvg = weekdayDays.size > 0 ? weekdayTotal / weekdayDays.size : 0;
+    const weekendAvg = weekendDays.size > 0 ? weekendTotal / weekendDays.size : 0;
+    return { weekdayTotal, weekendTotal, weekdayAvg, weekendAvg };
+  }, [expenseTx]);
+
+  // Period-over-period change (compare to previous equivalent window)
+  const periodChange = useMemo(() => {
+    const days = differenceInCalendarDays(rangeEnd, rangeStart) + 1;
+    if (days <= 0) return null;
+    const prevEnd = subDays(rangeStart, 1);
+    const prevStart = subDays(prevEnd, days - 1);
+    const prevTx = safeTransactions.filter((t) => {
+      const d = parseISO(t.date);
+      return isWithinInterval(d, { start: startOfDay(prevStart), end: endOfDay(prevEnd) });
+    });
+    const prevExpenses = prevTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+    const prevIncome = prevTx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+    const expChange = prevExpenses > 0 ? ((totalExpenses - prevExpenses) / prevExpenses) * 100 : null;
+    const incChange = prevIncome > 0 ? ((totalIncome - prevIncome) / prevIncome) * 100 : null;
+    return { prevExpenses, prevIncome, expChange, incChange, prevLabel: `${format(prevStart, "MMM dd")} – ${format(prevEnd, "MMM dd")}` };
+  }, [safeTransactions, rangeStart, rangeEnd, totalExpenses, totalIncome]);
+
+  // Recurring / subscription detection: same description+amount appearing in 2+ distinct months
+  const recurring = useMemo(() => {
+    const groups: Record<string, { description: string; category: string; amount: number; months: Set<string>; lastDate: string }> = {};
+    safeTransactions.filter((t) => t.type === "expense" && !t.isFee).forEach((t) => {
+      const desc = (t.description || t.category).trim().toLowerCase();
+      const key = `${desc}|${Math.round(t.amount)}`;
+      if (!groups[key]) {
+        groups[key] = {
+          description: t.description || t.category,
+          category: t.category,
+          amount: t.amount,
+          months: new Set(),
+          lastDate: t.date,
+        };
+      }
+      groups[key].months.add(t.date.slice(0, 7));
+      if (t.date > groups[key].lastDate) groups[key].lastDate = t.date;
+    });
+    return Object.values(groups)
+      .filter((g) => g.months.size >= 2)
+      .sort((a, b) => b.months.size - a.months.size || b.amount - a.amount)
+      .slice(0, 6);
+  }, [safeTransactions]);
+
   // Today/month for budget bars (still based on real today/month)
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const todayShared = getDayExpenses(todayStr);
