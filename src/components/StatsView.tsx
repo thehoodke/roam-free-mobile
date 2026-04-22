@@ -763,6 +763,114 @@ export default function StatsView({
         </div>
       )}
 
+      {/* Payment Method Usage */}
+      {methodUsage.length > 0 && (
+        <div className="glass-card rounded-3xl p-5 mb-4">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <CreditCard className="h-4 w-4 text-primary" />
+            Payment Methods
+          </div>
+          <div className="space-y-2">
+            {methodUsage.map((m, i) => {
+              const pct = totalExpenses > 0 ? (m.total / totalExpenses) * 100 : 0;
+              return (
+                <div key={m.label} className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="truncate">{m.label} <span className="text-muted-foreground">· {m.count} txn{m.count === 1 ? "" : "s"}</span></span>
+                    <span className="font-semibold">{formatCurrency(m.total)} · {pct.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Largest Transactions */}
+      {topTransactions.length > 0 && (
+        <div className="glass-card rounded-3xl p-5 mb-4">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <Flame className="h-4 w-4 text-expense" />
+            Largest Transactions
+          </div>
+          <div className="space-y-2">
+            {topTransactions.map((t, i) => (
+              <div key={t.id} className="flex items-center justify-between gap-3 rounded-2xl bg-muted p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold">
+                    <span className="text-muted-foreground mr-1">#{i + 1}</span>
+                    {t.description || displayCategory(t.category)}
+                  </p>
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                    {displayCategory(t.category)} · {getPartnerName(t.partner)} · {format(parseISO(t.date), "MMM dd")}
+                  </p>
+                </div>
+                <span className="text-sm font-semibold text-expense">{formatCurrency(t.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Weekday vs Weekend */}
+      {(weekdayWeekend.weekdayTotal > 0 || weekdayWeekend.weekendTotal > 0) && (
+        <div className="glass-card rounded-3xl p-5 mb-4">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <CalendarIcon className="h-4 w-4 text-accent" />
+            Weekday vs Weekend
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-2xl bg-muted p-3">
+              <p className="text-[11px] text-muted-foreground">Weekdays total</p>
+              <p className="mt-1 text-sm font-semibold">{formatCurrency(weekdayWeekend.weekdayTotal)}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">avg {formatCurrency(weekdayWeekend.weekdayAvg)}/day</p>
+            </div>
+            <div className="rounded-2xl bg-muted p-3">
+              <p className="text-[11px] text-muted-foreground">Weekends total</p>
+              <p className="mt-1 text-sm font-semibold">{formatCurrency(weekdayWeekend.weekendTotal)}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">avg {formatCurrency(weekdayWeekend.weekendAvg)}/day</p>
+            </div>
+          </div>
+          {weekdayWeekend.weekdayAvg > 0 && weekdayWeekend.weekendAvg > 0 && (
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              {weekdayWeekend.weekendAvg > weekdayWeekend.weekdayAvg
+                ? `You spend ${((weekdayWeekend.weekendAvg / weekdayWeekend.weekdayAvg - 1) * 100).toFixed(0)}% more per weekend day`
+                : `You spend ${((weekdayWeekend.weekdayAvg / weekdayWeekend.weekendAvg - 1) * 100).toFixed(0)}% more per weekday`}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Recurring / Subscriptions */}
+      {recurring.length > 0 && (
+        <div className="glass-card rounded-3xl p-5 mb-4">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <Repeat className="h-4 w-4 text-primary" />
+            Recurring Expenses
+          </div>
+          <p className="mb-3 text-[11px] text-muted-foreground">Same description &amp; amount across multiple months</p>
+          <div className="space-y-2">
+            {recurring.map((r, i) => (
+              <div key={i} className="flex items-center justify-between gap-3 rounded-2xl bg-muted p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold">{r.description}</p>
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                    {displayCategory(r.category)} · seen in {r.months.size} months
+                  </p>
+                </div>
+                <span className="text-sm font-semibold">{formatCurrency(r.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Category Breakdown Pie */}
       {pieData.length > 0 && (
         <div className="glass-card rounded-3xl p-5 mb-4">
