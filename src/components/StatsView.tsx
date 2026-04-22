@@ -9,7 +9,6 @@ import {
   format, parseISO, startOfDay, endOfDay, startOfWeek, endOfWeek,
   startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval,
   differenceInCalendarDays, isWithinInterval, subDays, getDay,
-  differenceInCalendarMonths,
 } from "date-fns";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
