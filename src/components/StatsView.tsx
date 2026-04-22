@@ -2,12 +2,13 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, TrendingUp, Users, PieChart, Target, Activity,
-  Trophy, Calendar as CalendarIcon, Sparkles,
+  Trophy, Calendar as CalendarIcon, Sparkles, Wallet, CreditCard,
+  Flame, Repeat, ArrowUpDown,
 } from "lucide-react";
 import {
   format, parseISO, startOfDay, endOfDay, startOfWeek, endOfWeek,
   startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval,
-  differenceInCalendarDays, isWithinInterval, subDays,
+  differenceInCalendarDays, isWithinInterval, subDays, getDay,
 } from "date-fns";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -219,6 +220,107 @@ export default function StatsView({
     }, {});
     return Object.entries(grouped).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
   }, [feeTransactions, getPaymentMethod]);
+
+  // Income by category & by partner
+  const incomeByCategory = useMemo(() => {
+    const map: Record<string, number> = {};
+    incomeTx.forEach((t) => {
+      const name = displayCategory(t.category);
+      map[name] = (map[name] || 0) + t.amount;
+    });
+    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [incomeTx, displayCategory]);
+
+  const partnerIncome = useMemo(() => {
+    const a = incomeTx.filter((t) => t.partner === "A").reduce((s, t) => s + t.amount, 0);
+    const b = incomeTx.filter((t) => t.partner === "B").reduce((s, t) => s + t.amount, 0);
+    return { A: a, B: b, total: a + b };
+  }, [incomeTx]);
+
+  const partnerIncomeAPercent = partnerIncome.total > 0
+    ? (partnerIncome.A / partnerIncome.total) * 100 : 50;
+
+  // Payment-method usage (expenses only, excluding fee entries)
+  const methodUsage = useMemo(() => {
+    const map: Record<string, { count: number; total: number; label: string }> = {};
+    expenseTx.filter((t) => !t.isFee).forEach((t) => {
+      const m = getPaymentMethod(t.paymentMethodId);
+      const key = m?.id || "unknown";
+      const label = m ? `${m.icon ?? ""} ${m.name}`.trim() : "Unspecified";
+      if (!map[key]) map[key] = { count: 0, total: 0, label };
+      map[key].count += 1;
+      map[key].total += t.amount;
+    });
+    return Object.values(map).sort((a, b) => b.total - a.total);
+  }, [expenseTx, getPaymentMethod]);
+
+  // Largest single transactions (top 5)
+  const topTransactions = useMemo(
+    () => [...expenseTx].filter((t) => !t.isFee).sort((a, b) => b.amount - a.amount).slice(0, 5),
+    [expenseTx]
+  );
+
+  // Weekday vs weekend
+  const weekdayWeekend = useMemo(() => {
+    let weekdayTotal = 0, weekendTotal = 0;
+    const weekdayDays = new Set<string>(), weekendDays = new Set<string>();
+    expenseTx.forEach((t) => {
+      const d = parseISO(t.date);
+      const dow = getDay(d); // 0=Sun, 6=Sat
+      const dayKey = format(d, "yyyy-MM-dd");
+      if (dow === 0 || dow === 6) {
+        weekendTotal += t.amount;
+        weekendDays.add(dayKey);
+      } else {
+        weekdayTotal += t.amount;
+        weekdayDays.add(dayKey);
+      }
+    });
+    const weekdayAvg = weekdayDays.size > 0 ? weekdayTotal / weekdayDays.size : 0;
+    const weekendAvg = weekendDays.size > 0 ? weekendTotal / weekendDays.size : 0;
+    return { weekdayTotal, weekendTotal, weekdayAvg, weekendAvg };
+  }, [expenseTx]);
+
+  // Period-over-period change (compare to previous equivalent window)
+  const periodChange = useMemo(() => {
+    const days = differenceInCalendarDays(rangeEnd, rangeStart) + 1;
+    if (days <= 0) return null;
+    const prevEnd = subDays(rangeStart, 1);
+    const prevStart = subDays(prevEnd, days - 1);
+    const prevTx = safeTransactions.filter((t) => {
+      const d = parseISO(t.date);
+      return isWithinInterval(d, { start: startOfDay(prevStart), end: endOfDay(prevEnd) });
+    });
+    const prevExpenses = prevTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+    const prevIncome = prevTx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+    const expChange = prevExpenses > 0 ? ((totalExpenses - prevExpenses) / prevExpenses) * 100 : null;
+    const incChange = prevIncome > 0 ? ((totalIncome - prevIncome) / prevIncome) * 100 : null;
+    return { prevExpenses, prevIncome, expChange, incChange, prevLabel: `${format(prevStart, "MMM dd")} – ${format(prevEnd, "MMM dd")}` };
+  }, [safeTransactions, rangeStart, rangeEnd, totalExpenses, totalIncome]);
+
+  // Recurring / subscription detection: same description+amount appearing in 2+ distinct months
+  const recurring = useMemo(() => {
+    const groups: Record<string, { description: string; category: string; amount: number; months: Set<string>; lastDate: string }> = {};
+    safeTransactions.filter((t) => t.type === "expense" && !t.isFee).forEach((t) => {
+      const desc = (t.description || t.category).trim().toLowerCase();
+      const key = `${desc}|${Math.round(t.amount)}`;
+      if (!groups[key]) {
+        groups[key] = {
+          description: t.description || t.category,
+          category: t.category,
+          amount: t.amount,
+          months: new Set(),
+          lastDate: t.date,
+        };
+      }
+      groups[key].months.add(t.date.slice(0, 7));
+      if (t.date > groups[key].lastDate) groups[key].lastDate = t.date;
+    });
+    return Object.values(groups)
+      .filter((g) => g.months.size >= 2)
+      .sort((a, b) => b.months.size - a.months.size || b.amount - a.amount)
+      .slice(0, 6);
+  }, [safeTransactions]);
 
   // Today/month for budget bars (still based on real today/month)
   const todayStr = format(new Date(), "yyyy-MM-dd");
@@ -523,6 +625,87 @@ export default function StatsView({
         )}
       </div>
 
+      {/* Period-over-Period Change */}
+      {periodChange && (periodChange.expChange !== null || periodChange.incChange !== null) && (
+        <div className="glass-card rounded-3xl p-5 mb-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+            <ArrowUpDown className="h-4 w-4 text-primary" />
+            Vs Previous Period
+          </div>
+          <p className="mb-3 text-[11px] text-muted-foreground">{periodChange.prevLabel}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-2xl bg-muted p-3">
+              <p className="text-[11px] text-muted-foreground">Expenses</p>
+              <p className="mt-1 text-sm font-semibold">{formatCurrency(periodChange.prevExpenses)}</p>
+              {periodChange.expChange !== null && (
+                <p className={cn("mt-0.5 text-[11px] font-semibold", periodChange.expChange > 0 ? "text-expense" : "text-income")}>
+                  {periodChange.expChange > 0 ? "▲" : "▼"} {Math.abs(periodChange.expChange).toFixed(0)}%
+                </p>
+              )}
+            </div>
+            <div className="rounded-2xl bg-muted p-3">
+              <p className="text-[11px] text-muted-foreground">Income</p>
+              <p className="mt-1 text-sm font-semibold">{formatCurrency(periodChange.prevIncome)}</p>
+              {periodChange.incChange !== null && (
+                <p className={cn("mt-0.5 text-[11px] font-semibold", periodChange.incChange >= 0 ? "text-income" : "text-expense")}>
+                  {periodChange.incChange >= 0 ? "▲" : "▼"} {Math.abs(periodChange.incChange).toFixed(0)}%
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Income Breakdown */}
+      {incomeByCategory.length > 0 && (
+        <div className="glass-card rounded-3xl p-5 mb-4">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <Wallet className="h-4 w-4 text-income" />
+            Income Breakdown
+          </div>
+          <div className="space-y-2">
+            {incomeByCategory.map((c, i) => {
+              const pct = totalIncome > 0 ? (c.value / totalIncome) * 100 : 0;
+              return (
+                <div key={c.name} className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="truncate">
+                      <span className="text-muted-foreground mr-1">#{i + 1}</span>
+                      {c.name}
+                    </span>
+                    <span className="font-semibold">{formatCurrency(c.value)} · {pct.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {partnerIncome.total > 0 && (
+            <div className="mt-5 space-y-2">
+              <p className="text-xs text-muted-foreground">By partner</p>
+              <div className="flex justify-between text-xs">
+                <span>{getPartnerName("A")}</span>
+                <span>{getPartnerName("B")}</span>
+              </div>
+              <div className="flex h-4 rounded-full overflow-hidden bg-muted">
+                <div className="bg-partner-a transition-all" style={{ width: `${partnerIncomeAPercent}%` }} />
+                <div className="bg-partner-b transition-all" style={{ width: `${100 - partnerIncomeAPercent}%` }} />
+              </div>
+              <div className="flex justify-between text-xs font-semibold">
+                <span className="partner-a">{formatCurrency(partnerIncome.A)}</span>
+                <span className="partner-b">{formatCurrency(partnerIncome.B)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Category Ranking */}
       {rankedCategories.length > 0 && (
         <div className="glass-card rounded-3xl p-5 mb-4">
@@ -576,6 +759,114 @@ export default function StatsView({
               <Bar dataKey="total" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Payment Method Usage */}
+      {methodUsage.length > 0 && (
+        <div className="glass-card rounded-3xl p-5 mb-4">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <CreditCard className="h-4 w-4 text-primary" />
+            Payment Methods
+          </div>
+          <div className="space-y-2">
+            {methodUsage.map((m, i) => {
+              const pct = totalExpenses > 0 ? (m.total / totalExpenses) * 100 : 0;
+              return (
+                <div key={m.label} className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="truncate">{m.label} <span className="text-muted-foreground">· {m.count} txn{m.count === 1 ? "" : "s"}</span></span>
+                    <span className="font-semibold">{formatCurrency(m.total)} · {pct.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Largest Transactions */}
+      {topTransactions.length > 0 && (
+        <div className="glass-card rounded-3xl p-5 mb-4">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <Flame className="h-4 w-4 text-expense" />
+            Largest Transactions
+          </div>
+          <div className="space-y-2">
+            {topTransactions.map((t, i) => (
+              <div key={t.id} className="flex items-center justify-between gap-3 rounded-2xl bg-muted p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold">
+                    <span className="text-muted-foreground mr-1">#{i + 1}</span>
+                    {t.description || displayCategory(t.category)}
+                  </p>
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                    {displayCategory(t.category)} · {getPartnerName(t.partner)} · {format(parseISO(t.date), "MMM dd")}
+                  </p>
+                </div>
+                <span className="text-sm font-semibold text-expense">{formatCurrency(t.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Weekday vs Weekend */}
+      {(weekdayWeekend.weekdayTotal > 0 || weekdayWeekend.weekendTotal > 0) && (
+        <div className="glass-card rounded-3xl p-5 mb-4">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <CalendarIcon className="h-4 w-4 text-accent" />
+            Weekday vs Weekend
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-2xl bg-muted p-3">
+              <p className="text-[11px] text-muted-foreground">Weekdays total</p>
+              <p className="mt-1 text-sm font-semibold">{formatCurrency(weekdayWeekend.weekdayTotal)}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">avg {formatCurrency(weekdayWeekend.weekdayAvg)}/day</p>
+            </div>
+            <div className="rounded-2xl bg-muted p-3">
+              <p className="text-[11px] text-muted-foreground">Weekends total</p>
+              <p className="mt-1 text-sm font-semibold">{formatCurrency(weekdayWeekend.weekendTotal)}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">avg {formatCurrency(weekdayWeekend.weekendAvg)}/day</p>
+            </div>
+          </div>
+          {weekdayWeekend.weekdayAvg > 0 && weekdayWeekend.weekendAvg > 0 && (
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              {weekdayWeekend.weekendAvg > weekdayWeekend.weekdayAvg
+                ? `You spend ${((weekdayWeekend.weekendAvg / weekdayWeekend.weekdayAvg - 1) * 100).toFixed(0)}% more per weekend day`
+                : `You spend ${((weekdayWeekend.weekdayAvg / weekdayWeekend.weekendAvg - 1) * 100).toFixed(0)}% more per weekday`}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Recurring / Subscriptions */}
+      {recurring.length > 0 && (
+        <div className="glass-card rounded-3xl p-5 mb-4">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <Repeat className="h-4 w-4 text-primary" />
+            Recurring Expenses
+          </div>
+          <p className="mb-3 text-[11px] text-muted-foreground">Same description &amp; amount across multiple months</p>
+          <div className="space-y-2">
+            {recurring.map((r, i) => (
+              <div key={i} className="flex items-center justify-between gap-3 rounded-2xl bg-muted p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold">{r.description}</p>
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                    {displayCategory(r.category)} · seen in {r.months.size} months
+                  </p>
+                </div>
+                <span className="text-sm font-semibold">{formatCurrency(r.amount)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
