@@ -2,12 +2,14 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, TrendingUp, Users, PieChart, Target, Activity,
-  Trophy, Calendar as CalendarIcon, Sparkles,
+  Trophy, Calendar as CalendarIcon, Sparkles, Wallet, CreditCard,
+  Flame, Repeat, ArrowUpDown,
 } from "lucide-react";
 import {
   format, parseISO, startOfDay, endOfDay, startOfWeek, endOfWeek,
   startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval,
-  differenceInCalendarDays, isWithinInterval, subDays,
+  differenceInCalendarDays, isWithinInterval, subDays, getDay,
+  differenceInCalendarMonths,
 } from "date-fns";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
