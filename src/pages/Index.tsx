@@ -1,16 +1,18 @@
 import { useState } from "react";
 import { format, subMonths, addMonths } from "date-fns";
-import { Settings, ChevronLeft, ChevronRight, BarChart3 } from "lucide-react";
+import { Settings, ChevronLeft, ChevronRight, BarChart3, LineChart } from "lucide-react";
 import { motion } from "framer-motion";
 import { useBudgetStore } from "@/hooks/useBudgetStore";
+import { useInvestments } from "@/hooks/useInvestments";
 import BalanceCard from "@/components/BalanceCard";
 import SpendingChart from "@/components/SpendingChart";
 import TransactionList from "@/components/TransactionList";
 import AddTransaction from "@/components/AddTransaction";
 import SettingsView from "@/components/SettingsView";
 import StatsView from "@/components/StatsView";
+import InvestmentsView from "@/components/InvestmentsView";
 
-type View = "home" | "settings" | "stats";
+type View = "home" | "settings" | "stats" | "investments";
 
 const Index = () => {
   const store = useBudgetStore();
