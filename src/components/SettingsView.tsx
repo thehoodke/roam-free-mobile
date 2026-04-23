@@ -5,9 +5,11 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { CoupleProfile, BudgetConfig, PaymentMethod, DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, DEFAULT_INVESTMENT_CATEGORIES } from "@/types/budget";
-import { ArrowLeft, Heart, Wallet, Tag, Plus, X, CalendarDays, CreditCard, Pencil, Check } from "lucide-react";
+import { ArrowLeft, Heart, Wallet, Tag, Plus, X, CalendarDays, CreditCard, Pencil, Check, Download, Upload, AlertTriangle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/currency";
+import { downloadBackup, restoreFromBackup, parseBackupFile, BackupData } from "@/lib/backup";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface SettingsViewProps {
   profile: CoupleProfile;
@@ -86,6 +88,7 @@ export default function SettingsView({
   const [newPmName, setNewPmName] = useState("");
   const [newPmIcon, setNewPmIcon] = useState("");
   const [newPmFee, setNewPmFee] = useState(false);
+  const [backupMessage, setBackupMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const buildBudgetConfig = (overrides: Partial<BudgetConfig> = {}): BudgetConfig => ({
     dailyLimitShared: parseFloat(dailyShared) || 0,
@@ -252,6 +255,43 @@ export default function SettingsView({
     persistBudgetConfig({ paymentMethods: next });
   };
 
+  const handleExportBackup = () => {
+    try {
+      downloadBackup();
+      setBackupMessage({ type: 'success', message: 'Backup downloaded successfully!' });
+      setTimeout(() => setBackupMessage(null), 3000);
+    } catch (error) {
+      setBackupMessage({ type: 'error', message: 'Failed to create backup' });
+      setTimeout(() => setBackupMessage(null), 3000);
+    }
+  };
+
+  const handleImportBackup = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const backupData = await parseBackupFile(file);
+      const result = restoreFromBackup(backupData);
+
+      if (result.success) {
+        setBackupMessage({ type: 'success', message: result.message });
+        // Clear the file input
+        event.target.value = '';
+        // Optionally refresh the page after a delay
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      } else {
+        setBackupMessage({ type: 'error', message: result.message });
+        setTimeout(() => setBackupMessage(null), 5000);
+      }
+    } catch (error) {
+      setBackupMessage({ type: 'error', message: error instanceof Error ? error.message : 'Failed to import backup' });
+      setTimeout(() => setBackupMessage(null), 5000);
+    }
+  };
+
   const allExpense = [...DEFAULT_EXPENSE_CATEGORIES, ...customExpense];
   const allIncome = [...DEFAULT_INCOME_CATEGORIES, ...customIncome];
 
@@ -274,6 +314,7 @@ export default function SettingsView({
           <TabsTrigger value="budget" className="flex-1 text-xs">Budget</TabsTrigger>
           <TabsTrigger value="categories" className="flex-1 text-xs">Categories</TabsTrigger>
           <TabsTrigger value="payments" className="flex-1 text-xs">Payments</TabsTrigger>
+          <TabsTrigger value="backup" className="flex-1 text-xs">Backup</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
@@ -445,6 +486,95 @@ export default function SettingsView({
                   <Button size="sm" variant="secondary" onClick={addPaymentMethod}><Plus className="h-4 w-4" /></Button>
                 </div>
               </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="backup">
+          <div className="space-y-4">
+            <div className="glass-card rounded-3xl p-6 space-y-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Download className="h-4 w-4 text-primary" />
+                <span>Backup Your Data</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Create a backup of all your transactions, settings, and investment data. This file can be used to restore your data on another device or after clearing your browser data.
+              </p>
+              <Button onClick={handleExportBackup} className="w-full" variant="default">
+                <Download className="h-4 w-4 mr-2" />
+                Download Backup
+              </Button>
+            </div>
+
+            <div className="glass-card rounded-3xl p-6 space-y-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Upload className="h-4 w-4 text-accent" />
+                <span>Restore from Backup</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Import data from a previously created backup file. This will replace all current data with the backup contents.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="backup-file" className="text-xs">Select backup file (.json)</Label>
+                <Input
+                  id="backup-file"
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportBackup}
+                  className="cursor-pointer"
+                />
+              </div>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" className="w-full">
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload & Restore
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-destructive" />
+                      Restore from Backup
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will replace all your current data with the backup file contents. This action cannot be undone. Make sure you have a recent backup of your current data if needed.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => document.getElementById('backup-file')?.click()}>
+                      Continue
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+
+            {backupMessage && (
+              <div className={`glass-card rounded-3xl p-4 ${
+                backupMessage.type === 'success'
+                  ? 'bg-green-50 border-green-200 text-green-800'
+                  : 'bg-red-50 border-red-200 text-red-800'
+              }`}>
+                <p className="text-sm font-medium">
+                  {backupMessage.type === 'success' ? '✅' : '❌'} {backupMessage.message}
+                </p>
+              </div>
+            )}
+
+            <div className="glass-card rounded-3xl p-6 space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <span>Important Notes</span>
+              </div>
+              <ul className="text-xs text-muted-foreground space-y-1">
+                <li>• Backups include all transactions, settings, and investment data</li>
+                <li>• Backup files are stored locally on your device</li>
+                <li>• Keep backup files secure and private</li>
+                <li>• Test restoration on a separate device first</li>
+                <li>• Data is stored locally - no cloud backup is performed</li>
+              </ul>
             </div>
           </div>
         </TabsContent>
