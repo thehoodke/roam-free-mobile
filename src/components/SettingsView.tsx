@@ -385,6 +385,30 @@ export default function SettingsView({
                 <Button size="sm" variant="secondary" onClick={addCustomIncome}><Plus className="h-4 w-4" /></Button>
               </div>
             </div>
+            <div className="glass-card rounded-3xl p-6 space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Tag className="h-4 w-4 text-primary" />
+                <span>Investment Categories ({[...DEFAULT_INVESTMENT_CATEGORIES, ...customInvestment].length})</span>
+              </div>
+              <p className="text-xs text-muted-foreground">Used when creating new investment accounts. Defaults include standard and Kenya-focused options.</p>
+              <div className="flex flex-wrap gap-2">
+                {DEFAULT_INVESTMENT_CATEGORIES.map((c) => (
+                  <span key={c} className="rounded-full bg-muted px-3 py-1 text-xs">{c}</span>
+                ))}
+                {customInvestment.map((c) => (
+                  <span key={c} className="rounded-full bg-primary/10 text-primary px-3 py-1 text-xs flex items-center gap-1">
+                    {c}
+                    <button onClick={() => deleteInvestmentCat(c)} className="hover:text-destructive">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Input placeholder="e.g. 🌾 Agribusiness" value={newInvestmentCat} onChange={(e) => setNewInvestmentCat(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCustomInvestment()} className="flex-1" />
+                <Button size="sm" variant="secondary" onClick={addCustomInvestment}><Plus className="h-4 w-4" /></Button>
+              </div>
+            </div>
           </div>
         </TabsContent>
 
