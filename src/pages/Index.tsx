@@ -39,6 +39,8 @@ const Index = () => {
     getPaymentMethod,
   } = store;
 
+  const investments = useInvestments();
+
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [view, setView] = useState<View>("home");
 
@@ -46,6 +48,9 @@ const Index = () => {
   const monthLabel = format(currentMonth, "MMMM yyyy");
   const totals = getTotals(monthKey);
   const monthTransactions = getMonthTransactions(monthKey);
+  const investFlow = investments.getMonthInvestmentFlow(monthKey);
+  // Investments reduce balance: contributions out, withdrawals back in
+  const adjustedBalance = totals.balance - investFlow.contributions + investFlow.withdrawals;
 
   if (view === "settings") {
     return (
@@ -81,6 +86,27 @@ const Index = () => {
     );
   }
 
+  if (view === "investments") {
+    return (
+      <InvestmentsView
+        accounts={investments.accounts}
+        totalPortfolioValue={investments.totalPortfolioValue}
+        portfolioByPartner={investments.portfolioByPartner}
+        customInvestmentCategories={budgetConfig.customInvestmentCategories || []}
+        paymentMethods={paymentMethods}
+        onAddAccount={investments.addAccount}
+        onUpdateAccount={investments.updateAccount}
+        onDeleteAccount={investments.deleteAccount}
+        onAddInvestmentTx={investments.addInvestmentTx}
+        onDeleteInvestmentTx={investments.deleteInvestmentTx}
+        getAccountBasis={investments.getAccountBasis}
+        getAccountTransactions={investments.getAccountTransactions}
+        getPartnerName={getPartnerName}
+        onBack={() => setView("home")}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background pb-24 mx-auto max-w-lg">
       {/* Header */}
@@ -92,6 +118,13 @@ const Index = () => {
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setView("investments")}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80"
+            aria-label="Investments"
+          >
+            <LineChart className="h-4 w-4" />
+          </button>
           <button
             onClick={() => setView("stats")}
             className="flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80"
@@ -129,8 +162,11 @@ const Index = () => {
         <BalanceCard
           income={totals.income}
           expenses={totals.expenses}
-          balance={totals.balance}
+          balance={adjustedBalance}
           monthLabel={monthLabel}
+          investmentNet={investFlow.net}
+          portfolioValue={investments.totalPortfolioValue}
+          onPortfolioClick={() => setView("investments")}
         />
 
         <SpendingChart transactions={monthTransactions} />
