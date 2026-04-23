@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { CoupleProfile, BudgetConfig, PaymentMethod, DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES } from "@/types/budget";
+import { CoupleProfile, BudgetConfig, PaymentMethod, DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, DEFAULT_INVESTMENT_CATEGORIES } from "@/types/budget";
 import { ArrowLeft, Heart, Wallet, Tag, Plus, X, CalendarDays, CreditCard, Pencil, Check } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/currency";
@@ -74,11 +74,13 @@ export default function SettingsView({
   const [monthlyB, setMonthlyB] = useState(String(budgetConfig.monthlyLimitB || ""));
   const [customExpense, setCustomExpense] = useState(budgetConfig.customExpenseCategories);
   const [customIncome, setCustomIncome] = useState(budgetConfig.customIncomeCategories);
+  const [customInvestment, setCustomInvestment] = useState(budgetConfig.customInvestmentCategories || []);
   const [renames, setRenames] = useState<Record<string, string>>(budgetConfig.categoryRenames || {});
   const [categoryLimits, setCategoryLimits] = useState<Record<string, number>>(budgetConfig.categoryLimits);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(budgetConfig.paymentMethods);
   const [newExpenseCat, setNewExpenseCat] = useState("");
   const [newIncomeCat, setNewIncomeCat] = useState("");
+  const [newInvestmentCat, setNewInvestmentCat] = useState("");
   const [newLimitCat, setNewLimitCat] = useState("");
   const [newLimitAmount, setNewLimitAmount] = useState("");
   const [newPmName, setNewPmName] = useState("");
@@ -97,6 +99,7 @@ export default function SettingsView({
     categoryRenames: renames,
     categoryLimits,
     paymentMethods,
+    customInvestmentCategories: customInvestment,
     ...overrides,
   });
 
@@ -180,6 +183,20 @@ export default function SettingsView({
       persistBudgetConfig({ customIncomeCategories: next });
       setNewIncomeCat("");
     }
+  };
+  const addCustomInvestment = () => {
+    const v = newInvestmentCat.trim();
+    if (v && !customInvestment.includes(v) && !DEFAULT_INVESTMENT_CATEGORIES.includes(v as never)) {
+      const next = [...customInvestment, v];
+      setCustomInvestment(next);
+      persistBudgetConfig({ customInvestmentCategories: next });
+      setNewInvestmentCat("");
+    }
+  };
+  const deleteInvestmentCat = (cat: string) => {
+    const next = customInvestment.filter((c) => c !== cat);
+    setCustomInvestment(next);
+    persistBudgetConfig({ customInvestmentCategories: next });
   };
   const addCategoryLimit = () => {
     if (newLimitCat.trim() && newLimitAmount) {
@@ -366,6 +383,30 @@ export default function SettingsView({
               <div className="flex gap-2 pt-2">
                 <Input placeholder="e.g. 🏘 Rental Income" value={newIncomeCat} onChange={(e) => setNewIncomeCat(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCustomIncome()} className="flex-1" />
                 <Button size="sm" variant="secondary" onClick={addCustomIncome}><Plus className="h-4 w-4" /></Button>
+              </div>
+            </div>
+            <div className="glass-card rounded-3xl p-6 space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Tag className="h-4 w-4 text-primary" />
+                <span>Investment Categories ({[...DEFAULT_INVESTMENT_CATEGORIES, ...customInvestment].length})</span>
+              </div>
+              <p className="text-xs text-muted-foreground">Used when creating new investment accounts. Defaults include standard and Kenya-focused options.</p>
+              <div className="flex flex-wrap gap-2">
+                {DEFAULT_INVESTMENT_CATEGORIES.map((c) => (
+                  <span key={c} className="rounded-full bg-muted px-3 py-1 text-xs">{c}</span>
+                ))}
+                {customInvestment.map((c) => (
+                  <span key={c} className="rounded-full bg-primary/10 text-primary px-3 py-1 text-xs flex items-center gap-1">
+                    {c}
+                    <button onClick={() => deleteInvestmentCat(c)} className="hover:text-destructive">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Input placeholder="e.g. 🌾 Agribusiness" value={newInvestmentCat} onChange={(e) => setNewInvestmentCat(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCustomInvestment()} className="flex-1" />
+                <Button size="sm" variant="secondary" onClick={addCustomInvestment}><Plus className="h-4 w-4" /></Button>
               </div>
             </div>
           </div>

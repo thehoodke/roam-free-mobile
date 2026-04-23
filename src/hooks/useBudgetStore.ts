@@ -64,6 +64,7 @@ const defaultConfig: BudgetConfig = {
   categoryRenames: {},
   categoryLimits: {},
   paymentMethods: DEFAULT_PAYMENT_METHODS,
+  customInvestmentCategories: [],
 };
 
 export function useBudgetStore() {
@@ -78,6 +79,7 @@ export function useBudgetStore() {
     return {
       ...defaultConfig,
       ...loaded,
+      customInvestmentCategories: loaded.customInvestmentCategories ?? [],
       paymentMethods: normalizePaymentMethods(loaded.paymentMethods),
     } as BudgetConfig;
   });
