@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { CoupleProfile, BudgetConfig, PaymentMethod, DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES } from "@/types/budget";
+import { CoupleProfile, BudgetConfig, PaymentMethod, DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, DEFAULT_INVESTMENT_CATEGORIES } from "@/types/budget";
 import { ArrowLeft, Heart, Wallet, Tag, Plus, X, CalendarDays, CreditCard, Pencil, Check } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/currency";
@@ -80,6 +80,7 @@ export default function SettingsView({
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(budgetConfig.paymentMethods);
   const [newExpenseCat, setNewExpenseCat] = useState("");
   const [newIncomeCat, setNewIncomeCat] = useState("");
+  const [newInvestmentCat, setNewInvestmentCat] = useState("");
   const [newLimitCat, setNewLimitCat] = useState("");
   const [newLimitAmount, setNewLimitAmount] = useState("");
   const [newPmName, setNewPmName] = useState("");
@@ -182,6 +183,20 @@ export default function SettingsView({
       persistBudgetConfig({ customIncomeCategories: next });
       setNewIncomeCat("");
     }
+  };
+  const addCustomInvestment = () => {
+    const v = newInvestmentCat.trim();
+    if (v && !customInvestment.includes(v) && !DEFAULT_INVESTMENT_CATEGORIES.includes(v as never)) {
+      const next = [...customInvestment, v];
+      setCustomInvestment(next);
+      persistBudgetConfig({ customInvestmentCategories: next });
+      setNewInvestmentCat("");
+    }
+  };
+  const deleteInvestmentCat = (cat: string) => {
+    const next = customInvestment.filter((c) => c !== cat);
+    setCustomInvestment(next);
+    persistBudgetConfig({ customInvestmentCategories: next });
   };
   const addCategoryLimit = () => {
     if (newLimitCat.trim() && newLimitAmount) {
