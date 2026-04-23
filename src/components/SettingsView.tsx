@@ -74,6 +74,7 @@ export default function SettingsView({
   const [monthlyB, setMonthlyB] = useState(String(budgetConfig.monthlyLimitB || ""));
   const [customExpense, setCustomExpense] = useState(budgetConfig.customExpenseCategories);
   const [customIncome, setCustomIncome] = useState(budgetConfig.customIncomeCategories);
+  const [customInvestment, setCustomInvestment] = useState(budgetConfig.customInvestmentCategories || []);
   const [renames, setRenames] = useState<Record<string, string>>(budgetConfig.categoryRenames || {});
   const [categoryLimits, setCategoryLimits] = useState<Record<string, number>>(budgetConfig.categoryLimits);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(budgetConfig.paymentMethods);
@@ -97,6 +98,7 @@ export default function SettingsView({
     categoryRenames: renames,
     categoryLimits,
     paymentMethods,
+    customInvestmentCategories: customInvestment,
     ...overrides,
   });
 
