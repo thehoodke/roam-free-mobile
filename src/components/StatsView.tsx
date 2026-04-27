@@ -18,7 +18,7 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart as RPieChart, Pie, Cell, Legend,
 } from "recharts";
-import { Partner, BudgetConfig, PaymentMethod, Transaction } from "@/types/budget";
+import { Partner, BudgetConfig, PaymentMethod, Transaction, CategoryNode } from "@/types/budget";
 import { formatCurrency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
@@ -65,6 +65,7 @@ export default function StatsView({
   const safeTransactions = allTransactions ?? [];
   const [period, setPeriod] = useState<PeriodKey>("month");
   const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>({});
+  const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set());
 
   // Compute period interval
   const { rangeStart, rangeEnd, rangeLabel } = useMemo(() => {
@@ -115,6 +116,86 @@ export default function StatsView({
 
   const totalExpenses = useMemo(() => expenseTx.reduce((s, t) => s + t.amount, 0), [expenseTx]);
   const totalIncome = useMemo(() => incomeTx.reduce((s, t) => s + t.amount, 0), [incomeTx]);
+
+  const expenseCategoryTree = budgetConfig.categoryTree?.expense || [];
+  const expenseTotalsByCategoryId = useMemo(() => {
+    const map = new Map<string, number>();
+    expenseTx.filter((t) => !t.isFee).forEach((t) => {
+      map.set(t.category, (map.get(t.category) || 0) + t.amount);
+    });
+    return map;
+  }, [expenseTx]);
+
+  const expenseCategoryTreeWithTotals = useMemo(() => {
+    const build = (nodes: CategoryNode[]) =>
+      nodes.map((node) => {
+        const children = node.children ? build(node.children) : [];
+        const ownAmount = expenseTotalsByCategoryId.get(node.id) || 0;
+        const totalAmount = ownAmount + children.reduce((sum, child) => sum + child.totalAmount, 0);
+        return { ...node, ownAmount, totalAmount, children };
+      });
+    return build(expenseCategoryTree);
+  }, [expenseCategoryTree, expenseTotalsByCategoryId]);
+
+  const toggleCategory = (id: string) => {
+    setExpandedCategoryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const renderExpenseCategoryRows = (nodes: Array<CategoryNode & { ownAmount: number; totalAmount: number; children?: any[] }>, depth = 0) => {
+    return nodes.map((node) => (
+      <div key={node.id} className="space-y-2">
+        <div className="flex items-center justify-between rounded-2xl bg-muted p-3" style={{ paddingLeft: `${depth * 16 + 16}px` }}>
+          <div className="flex items-center gap-2">
+            {node.children?.length ? (
+              <button
+                type="button"
+                onClick={() => toggleCategory(node.id)}
+                className="text-xs text-muted-foreground"
+              >
+                {expandedCategoryIds.has(node.id) ? "−" : "+"}
+              </button>
+            ) : <span className="w-5" />}
+            <div>
+              <div className="text-sm font-medium">{node.name}</div>
+              <div className="text-[11px] text-muted-foreground">{displayCategory(node.id)}</div>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-sm font-semibold">{formatCurrency(node.totalAmount)}</div>
+            <div className="text-[11px] text-muted-foreground">
+              {totalExpenses > 0 ? `${((node.totalAmount / totalExpenses) * 100).toFixed(0)}%` : "0%"}
+            </div>
+          </div>
+        </div>
+        {expandedCategoryIds.has(node.id) && node.children?.length ? renderExpenseCategoryRows(node.children, depth + 1) : null}
+      </div>
+    ));
+  };
+
+  const renderedCategoryRows = useMemo(() => {
+    const rows: Array<{ id: string; category: string; total: number; depth: number; isLeaf: boolean }> = [];
+    const traverse = (nodes: Array<CategoryNode & { ownAmount: number; totalAmount: number; children?: any[] }>, depth = 0) => {
+      nodes.forEach((node) => {
+        rows.push({
+          id: node.id,
+          category: node.name,
+          total: node.totalAmount,
+          depth,
+          isLeaf: !node.children || node.children.length === 0,
+        });
+        if ((node.children && node.children.length > 0) && expandedCategoryIds.has(node.id)) {
+          traverse(node.children, depth + 1);
+        }
+      });
+    };
+    traverse(expenseCategoryTreeWithTotals);
+    return rows;
+  }, [expenseCategoryTreeWithTotals, expandedCategoryIds]);
 
   // Partner spending in range
   const partnerSpending = useMemo(() => {
@@ -910,6 +991,51 @@ export default function StatsView({
                 <Progress value={pct} className="h-2" />
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {renderedCategoryRows.length > 0 && (
+        <div className="glass-card rounded-3xl p-5 mb-4">
+          <div className="mb-4 flex items-center gap-2 text-sm font-semibold">
+            <Layers className="h-4 w-4 text-primary" />
+            Category Drilldown
+          </div>
+          <div className="overflow-hidden rounded-2xl border border-border bg-muted">
+            <div className="grid grid-cols-[1fr_150px_150px] gap-2 rounded-t-2xl bg-slate-100/80 px-3 py-2 text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
+              <span>Category</span>
+              <span className="text-right">Expenses</span>
+              <span className="text-right">Depth</span>
+            </div>
+            <div className="space-y-1 px-3 py-2">
+              {renderedCategoryRows.map((row) => {
+                const hasChildren = !row.isLeaf;
+                const isExpanded = expandedCategoryIds.has(row.id);
+                return (
+                  <div key={row.id} className="grid grid-cols-[1fr_150px_150px] items-center gap-2 rounded-2xl bg-slate-50/80 px-3 py-3">
+                    <div className="flex items-center gap-2">
+                      {hasChildren ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleCategory(row.id)}
+                          className="text-xs text-muted-foreground w-4 h-4 flex items-center justify-center"
+                        >
+                          {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                        </button>
+                      ) : (
+                        <span className="w-4" />
+                      )}
+                      <span className="text-xs text-muted-foreground">{row.depth > 0 ? "↳" : ""}</span>
+                      <span className="truncate" style={{ marginLeft: row.depth * 12 }}>
+                        {row.category}
+                      </span>
+                    </div>
+                    <span className="text-right font-semibold">{formatCurrency(row.total)}</span>
+                    <span className="text-right text-xs text-muted-foreground">{row.depth === 0 ? "root" : row.isLeaf ? "leaf" : "branch"}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

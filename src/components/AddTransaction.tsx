@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X } from "lucide-react";
+import { Plus, X, ArrowRightLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,35 +11,48 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Partner, Transaction, PaymentMethod } from "@/types/budget";
+import { Partner, Transaction, PaymentMethod, CategoryNode } from "@/types/budget";
 
 interface AddTransactionProps {
   onAdd: (tx: Omit<Transaction, "id">) => void;
+  onAddTransfer?: (fromAccountId: string, toAccountId: string, amount: number, partner: Partner, description: string, transactionCost?: number) => void;
   getPartnerName: (p: Partner) => string;
-  expenseCategories: readonly string[] | string[];
-  incomeCategories: readonly string[] | string[];
+  expenseCategories: CategoryNode[];
+  incomeCategories: CategoryNode[];
   paymentMethods: PaymentMethod[];
-  displayCategory: (c: string) => string;
+  getCategoryDisplayName: (categoryId: string, type: 'expense' | 'income') => string;
 }
 
 export default function AddTransaction({
   onAdd,
+  onAddTransfer,
   getPartnerName,
   expenseCategories,
   incomeCategories,
   paymentMethods,
-  displayCategory,
+  getCategoryDisplayName,
 }: AddTransactionProps) {
   const [open, setOpen] = useState(false);
-  const [type, setType] = useState<"income" | "expense">("expense");
+  const [type, setType] = useState<"income" | "expense" | "transfer">("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [partner, setPartner] = useState<Partner>("A");
   const [paymentMethodId, setPaymentMethodId] = useState<string>(paymentMethods[0]?.id || "");
   const [transactionCost, setTransactionCost] = useState("");
+  const [transferToAccountId, setTransferToAccountId] = useState<string>("");
 
   const categories = type === "expense" ? expenseCategories : incomeCategories;
+  const flattenedCategories = useMemo(() => {
+    const flatten = (nodes: CategoryNode[]): CategoryNode[] =>
+      nodes.flatMap((node) => [
+        node,
+        ...(node.children ? flatten(node.children) : []),
+      ]);
+
+    return flatten(categories);
+  }, [categories]);
+
   const selectedPm = useMemo(
     () => paymentMethods.find((p) => p.id === paymentMethodId),
     [paymentMethods, paymentMethodId]
@@ -58,21 +71,39 @@ export default function AddTransaction({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || !category) return;
-    onAdd({
-      amount: parseFloat(amount),
-      type,
-      category,
-      description,
-      partner,
-      date: new Date().toISOString(),
-      paymentMethodId: paymentMethodId || undefined,
-      transactionCost: selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : undefined,
-    });
+
+    if (type === "transfer") {
+      if (!amount || !paymentMethodId || !transferToAccountId || !onAddTransfer) return;
+
+      onAddTransfer(
+        paymentMethodId,
+        transferToAccountId,
+        parseFloat(amount),
+        partner,
+        description,
+        selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : undefined
+      );
+    } else {
+      if (!amount || !category) return;
+
+      onAdd({
+        amount: parseFloat(amount),
+        type,
+        category,
+        description,
+        partner,
+        date: new Date().toISOString(),
+        paymentMethodId: paymentMethodId || undefined,
+        transactionCost: selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : undefined,
+      });
+    }
+
+    // Reset form
     setAmount("");
     setCategory("");
     setDescription("");
     setTransactionCost("");
+    setTransferToAccountId("");
     setOpen(false);
   };
 
@@ -111,10 +142,10 @@ export default function AddTransaction({
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="flex gap-2 rounded-xl bg-muted p-1">
+                <div className="flex gap-1 rounded-xl bg-muted p-1">
                   <button
                     type="button"
-                    onClick={() => { setType("expense"); setCategory(""); }}
+                    onClick={() => { setType("expense"); setCategory(""); setTransferToAccountId(""); }}
                     className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${
                       type === "expense" ? "bg-expense text-primary-foreground" : "text-muted-foreground"
                     }`}
@@ -123,12 +154,26 @@ export default function AddTransaction({
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setType("income"); setCategory(""); }}
+                    onClick={() => { setType("income"); setCategory(""); setTransferToAccountId(""); }}
                     className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${
                       type === "income" ? "bg-income text-primary-foreground" : "text-muted-foreground"
                     }`}
                   >
                     Income
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setType("transfer");
+                      setCategory("");
+                      setTransferToAccountId("");
+                      setTransactionCost("");
+                    }}
+                    className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${
+                      type === "transfer" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    <ArrowRightLeft className="h-4 w-4 mx-auto" />
                   </button>
                 </div>
 
@@ -147,30 +192,68 @@ export default function AddTransaction({
                   />
                 </div>
 
-                <div>
-                  <Label>Category</Label>
-                  <Select value={category} onValueChange={setCategory} required>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {displayCategory(c)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {type !== "transfer" && (
+                  <div>
+                    <Label>Category</Label>
+                    <Select value={category} onValueChange={setCategory} required>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {flattenedCategories.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.fullPath}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
-                <div>
-                  <Label>Payment Method</Label>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    {paymentMethods.map((pm) => {
-                      const isActive = pm.id === paymentMethodId;
+                {type === "transfer" && (
+                  <div className="space-y-4">
+                    <div>
+                      <Label>From Account</Label>
+                      <Select value={paymentMethodId} onValueChange={setPaymentMethodId} required>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select source account" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {paymentMethods.map((pm) => (
+                            <SelectItem key={pm.id} value={pm.id}>
+                              {pm.icon} {pm.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>To Account</Label>
+                      <Select value={transferToAccountId} onValueChange={setTransferToAccountId} required>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select destination account" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {paymentMethods.filter(pm => pm.id !== paymentMethodId).map((pm) => (
+                            <SelectItem key={pm.id} value={pm.id}>
+                              {pm.icon} {pm.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
 
-                      return (
-                        <button
+                {type !== "transfer" && (
+                  <div>
+                    <Label>Payment Method</Label>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      {paymentMethods.map((pm) => {
+                        const isActive = pm.id === paymentMethodId;
+
+                        return (
+                          <button
                           key={pm.id}
                           type="button"
                           onClick={() => {
@@ -195,6 +278,7 @@ export default function AddTransaction({
                     })}
                   </div>
                 </div>
+                )}
 
                 {selectedPm?.supportsFee && (
                   <div>
@@ -255,7 +339,7 @@ export default function AddTransaction({
                 </div>
 
                 <Button type="submit" className="w-full" size="lg">
-                  Add {type === "expense" ? "Expense" : "Income"}
+                  Add {type === "expense" ? "Expense" : type === "income" ? "Income" : "Transfer"}
                 </Button>
               </form>
             </motion.div>

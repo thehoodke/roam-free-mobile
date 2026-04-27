@@ -8,7 +8,14 @@ import {
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_INCOME_CATEGORIES,
   DEFAULT_PAYMENT_METHODS,
+  createDefaultCategoryTree,
+  CategoryNode,
+  findCategoryById,
+  getAllCategoryIds,
+  getCategoryPath,
+  addSubcategory,
 } from "@/types/budget";
+import { useAccountBalances } from "@/hooks/useAccountBalances";
 import { format, startOfDay, endOfDay, parseISO, startOfWeek, endOfWeek, eachDayOfInterval, subDays } from "date-fns";
 
 const STORAGE_KEYS = {
@@ -65,6 +72,7 @@ const defaultConfig: BudgetConfig = {
   categoryLimits: {},
   paymentMethods: DEFAULT_PAYMENT_METHODS,
   customInvestmentCategories: [],
+  categoryTree: createDefaultCategoryTree(),
 };
 
 export function useBudgetStore() {
@@ -81,8 +89,18 @@ export function useBudgetStore() {
       ...loaded,
       customInvestmentCategories: loaded.customInvestmentCategories ?? [],
       paymentMethods: normalizePaymentMethods(loaded.paymentMethods),
+      categoryTree: loaded.categoryTree || createDefaultCategoryTree(),
     } as BudgetConfig;
   });
+
+  const {
+    balances,
+    setInitialBalance,
+    adjustBalance,
+    getBalance,
+    getTotalBalanceByPartner,
+    getAllBalancesByPartner,
+  } = useAccountBalances();
 
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.TRANSACTIONS, transactions);
@@ -101,7 +119,6 @@ export function useBudgetStore() {
     const newTx: Transaction = { ...tx, id };
     setTransactions((prev) => {
       const next = [newTx, ...prev];
-      // Auto-create a fee transaction if transactionCost provided
       if (tx.transactionCost && tx.transactionCost > 0) {
         const feeTx: Transaction = {
           id: crypto.randomUUID(),
@@ -119,7 +136,16 @@ export function useBudgetStore() {
       }
       return next;
     });
-  }, []);
+
+    if (tx.paymentMethodId) {
+      const fee = tx.transactionCost ?? 0;
+      if (tx.type === "income") {
+        adjustBalance(tx.paymentMethodId, tx.partner, tx.amount - fee);
+      } else if (tx.type === "expense") {
+        adjustBalance(tx.paymentMethodId, tx.partner, -(tx.amount + fee));
+      }
+    }
+  }, [adjustBalance]);
 
   const deleteTransaction = useCallback((id: string) => {
     setTransactions((prev) => prev.filter((t) => t.id !== id && t.parentId !== id));
@@ -248,15 +274,101 @@ export function useBudgetStore() {
     [transactions]
   );
 
-  const displayCategory = useCallback(
-    (c: string) => budgetConfig.categoryRenames?.[c] || c,
-    [budgetConfig.categoryRenames]
-  );
-
   const getPaymentMethod = useCallback(
     (id?: string) => budgetConfig.paymentMethods.find((p) => p.id === id),
     [budgetConfig.paymentMethods]
   );
+
+  // Category tree management
+  const getCategoryTree = useCallback((type: 'expense' | 'income' | 'investment' | 'debt') => {
+    return budgetConfig.categoryTree?.[type] || [];
+  }, [budgetConfig.categoryTree]);
+
+  const findCategory = useCallback((categoryId: string, type: 'expense' | 'income' | 'investment' | 'debt') => {
+    const tree = getCategoryTree(type);
+    return findCategoryById(tree, categoryId);
+  }, [getCategoryTree]);
+
+  const displayCategory = useCallback(
+    (categoryId: string) => {
+      const category =
+        findCategory(categoryId, 'expense') ||
+        findCategory(categoryId, 'income') ||
+        findCategory(categoryId, 'investment') ||
+        findCategory(categoryId, 'debt');
+      return category?.fullPath || budgetConfig.categoryRenames?.[categoryId] || categoryId;
+    },
+    [budgetConfig.categoryRenames, findCategory]
+  );
+
+  const getCategoryDisplayName = useCallback((categoryId: string, type: 'expense' | 'income' | 'investment' | 'debt') => {
+    const category = findCategory(categoryId, type);
+    return category?.fullPath || categoryId;
+  }, [findCategory]);
+
+  const addSubcategoryToTree = useCallback((
+    type: 'expense' | 'income' | 'investment' | 'debt',
+    parentId: string,
+    name: string,
+    icon?: string
+  ) => {
+    const currentTree = budgetConfig.categoryTree || createDefaultCategoryTree();
+    const updatedTree = { ...currentTree };
+    updatedTree[type] = addSubcategory(updatedTree[type], parentId, name, icon);
+
+    setBudgetConfig(prev => ({
+      ...prev,
+      categoryTree: updatedTree,
+    }));
+  }, [budgetConfig.categoryTree]);
+
+  // Transfer transactions
+  const addTransferTransaction = useCallback((
+    fromAccountId: string,
+    toAccountId: string,
+    amount: number,
+    partner: Partner,
+    description: string,
+    transactionCost?: number
+  ) => {
+    const transferId = crypto.randomUUID();
+    const fee = transactionCost ?? 0;
+    const receivedAmount = Math.max(0, amount - fee);
+
+    const transferOut: Transaction = {
+      id: `${transferId}-out`,
+      amount,
+      type: "transfer",
+      category: "transfer",
+      description: `Transfer to ${toAccountId}: ${description}`,
+      partner,
+      date: new Date().toISOString(),
+      paymentMethodId: fromAccountId,
+      transactionCost: fee ? fee / 2 : undefined,
+      transferFromAccountId: fromAccountId,
+      transferToAccountId: toAccountId,
+    };
+
+    const transferIn: Transaction = {
+      id: `${transferId}-in`,
+      amount: receivedAmount,
+      type: "transfer",
+      category: "transfer",
+      description: `Transfer from ${fromAccountId}: ${description}`,
+      partner,
+      date: new Date().toISOString(),
+      paymentMethodId: toAccountId,
+      transactionCost: fee ? fee / 2 : undefined,
+      transferFromAccountId: fromAccountId,
+      transferToAccountId: toAccountId,
+    };
+
+    setTransactions((prev) => [...prev, transferOut, transferIn]);
+    adjustBalance(fromAccountId, partner, -amount);
+    adjustBalance(toAccountId, partner, receivedAmount);
+
+    return { transferOut, transferIn };
+  }, [adjustBalance]);
 
   return {
     transactions,
@@ -277,7 +389,19 @@ export function useBudgetStore() {
     expenseCategories,
     incomeCategories,
     paymentMethods: budgetConfig.paymentMethods,
+    balances,
+    setInitialBalance,
+    getBalance,
+    getTotalBalanceByPartner,
+    getAllBalancesByPartner,
     displayCategory,
     getPaymentMethod,
+    // New category tree functions
+    getCategoryTree,
+    findCategory,
+    getCategoryDisplayName,
+    addSubcategoryToTree,
+    // Transfer functions
+    addTransferTransaction,
   };
 }

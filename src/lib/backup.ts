@@ -1,4 +1,4 @@
-import { Transaction, CoupleProfile, BudgetConfig, InvestmentAccount, InvestmentTransaction } from "@/types/budget";
+import { Transaction, CoupleProfile, BudgetConfig, InvestmentAccount, InvestmentTransaction, AccountBalance, Debt, DebtPayment } from "@/types/budget";
 
 export interface BackupData {
   version: string;
@@ -8,6 +8,9 @@ export interface BackupData {
   budgetConfig: BudgetConfig;
   investmentAccounts: InvestmentAccount[];
   investmentTransactions: InvestmentTransaction[];
+  accountBalances: AccountBalance[];
+  debts: Debt[];
+  debtPayments: DebtPayment[];
 }
 
 const STORAGE_KEYS = {
@@ -16,6 +19,9 @@ const STORAGE_KEYS = {
   BUDGET_CONFIG: "couplebank_budget_config",
   INVEST_ACCOUNTS: "couplebank_invest_accounts",
   INVEST_TX: "couplebank_invest_transactions",
+  ACCOUNT_BALANCES: "couplebank_account_balances",
+  DEBTS: "couplebank_debts",
+  DEBT_PAYMENTS: "couplebank_debt_payments",
 };
 
 const BACKUP_VERSION = "1.0";
@@ -42,6 +48,9 @@ export function createBackup(): BackupData {
   const budgetConfig = loadFromStorage<BudgetConfig>(STORAGE_KEYS.BUDGET_CONFIG, {});
   const investmentAccounts = loadFromStorage<InvestmentAccount[]>(STORAGE_KEYS.INVEST_ACCOUNTS, []);
   const investmentTransactions = loadFromStorage<InvestmentTransaction[]>(STORAGE_KEYS.INVEST_TX, []);
+  const accountBalances = loadFromStorage<AccountBalance[]>(STORAGE_KEYS.ACCOUNT_BALANCES, []);
+  const debts = loadFromStorage<Debt[]>(STORAGE_KEYS.DEBTS, []);
+  const debtPayments = loadFromStorage<DebtPayment[]>(STORAGE_KEYS.DEBT_PAYMENTS, []);
 
   return {
     version: BACKUP_VERSION,
@@ -51,6 +60,9 @@ export function createBackup(): BackupData {
     budgetConfig,
     investmentAccounts,
     investmentTransactions,
+    accountBalances,
+    debts,
+    debtPayments,
   };
 }
 
@@ -80,6 +92,9 @@ export function restoreFromBackup(backupData: BackupData): { success: boolean; m
     saveToStorage(STORAGE_KEYS.BUDGET_CONFIG, backupData.budgetConfig);
     saveToStorage(STORAGE_KEYS.INVEST_ACCOUNTS, backupData.investmentAccounts || []);
     saveToStorage(STORAGE_KEYS.INVEST_TX, backupData.investmentTransactions || []);
+    saveToStorage(STORAGE_KEYS.ACCOUNT_BALANCES, backupData.accountBalances || []);
+    saveToStorage(STORAGE_KEYS.DEBTS, backupData.debts || []);
+    saveToStorage(STORAGE_KEYS.DEBT_PAYMENTS, backupData.debtPayments || []);
 
     return { success: true, message: "Data restored successfully! Please refresh the page to see changes." };
   } catch (error) {

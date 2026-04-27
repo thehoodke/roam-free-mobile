@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { format, subMonths, addMonths } from "date-fns";
-import { Settings, ChevronLeft, ChevronRight, BarChart3, LineChart } from "lucide-react";
+import { Settings, ChevronLeft, ChevronRight, BarChart3, LineChart, CreditCard, Wallet } from "lucide-react";
 import { motion } from "framer-motion";
 import { useBudgetStore } from "@/hooks/useBudgetStore";
 import { useInvestments } from "@/hooks/useInvestments";
@@ -11,8 +11,10 @@ import AddTransaction from "@/components/AddTransaction";
 import SettingsView from "@/components/SettingsView";
 import StatsView from "@/components/StatsView";
 import InvestmentsView from "@/components/InvestmentsView";
+import DebtView from "@/components/DebtView";
+import AccountBalancesView from "@/components/AccountBalancesView";
 
-type View = "home" | "settings" | "stats" | "investments";
+type View = "home" | "settings" | "stats" | "investments" | "debt" | "balances";
 
 const Index = () => {
   const store = useBudgetStore();
@@ -21,6 +23,7 @@ const Index = () => {
     profile,
     budgetConfig,
     addTransaction,
+    addTransferTransaction,
     deleteTransaction,
     updateProfile,
     updateBudgetConfig,
@@ -32,6 +35,8 @@ const Index = () => {
     getDailyTrend,
     getDayExpenses,
     getMonthExpenses,
+    getCategoryTree,
+    getCategoryDisplayName,
     expenseCategories,
     incomeCategories,
     paymentMethods,
@@ -107,6 +112,24 @@ const Index = () => {
     );
   }
 
+  if (view === "debt") {
+    return (
+      <DebtView
+        onBack={() => setView("home")}
+        getPartnerName={getPartnerName}
+      />
+    );
+  }
+
+  if (view === "balances") {
+    return (
+      <AccountBalancesView
+        onBack={() => setView("home")}
+        getPartnerName={getPartnerName}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background pb-24 mx-auto max-w-lg">
       {/* Header */}
@@ -118,6 +141,20 @@ const Index = () => {
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setView("balances")}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80"
+            aria-label="Account Balances"
+          >
+            <Wallet className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setView("debt")}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80"
+            aria-label="Debt Management"
+          >
+            <CreditCard className="h-4 w-4" />
+          </button>
           <button
             onClick={() => setView("investments")}
             className="flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80"
@@ -185,11 +222,12 @@ const Index = () => {
 
       <AddTransaction
         onAdd={addTransaction}
+        onAddTransfer={addTransferTransaction}
         getPartnerName={getPartnerName}
-        expenseCategories={expenseCategories}
-        incomeCategories={incomeCategories}
+        expenseCategories={getCategoryTree('expense')}
+        incomeCategories={getCategoryTree('income')}
         paymentMethods={paymentMethods}
-        displayCategory={displayCategory}
+        getCategoryDisplayName={getCategoryDisplayName}
       />
     </div>
   );
