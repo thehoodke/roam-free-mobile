@@ -38,6 +38,7 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
   const { getCategoryTree, getCategoryDisplayName, paymentMethods } = useBudgetStore();
 
   const [showAddDebt, setShowAddDebt] = useState(false);
+  const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState<Debt | null>(null);
   const [newDebt, setNewDebt] = useState({
     name: "",
@@ -47,6 +48,8 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
     debtor: "shared" as "A" | "B" | "shared",
     dueDate: "",
     interestRate: "",
+    loanType: "term" as "term" | "30-day",
+    loanTermMonths: "",
     category: "",
   });
 
@@ -59,20 +62,24 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
 
   const debtCategories = getCategoryTree('debt');
 
-  const handleAddDebt = () => {
-    if (!newDebt.name || !newDebt.totalAmount || !newDebt.category) return;
-
-    addDebt({
-      name: newDebt.name,
-      description: newDebt.description || undefined,
-      totalAmount: parseFloat(newDebt.totalAmount),
-      remainingAmount: parseFloat(newDebt.totalAmount),
-      creditor: newDebt.creditor,
-      debtor: newDebt.debtor,
-      dueDate: newDebt.dueDate || undefined,
-      interestRate: newDebt.interestRate ? parseFloat(newDebt.interestRate) : undefined,
-      category: newDebt.category,
-    });
+  const resetDebtForm = (debt: Debt | null = null) => {
+    if (debt) {
+      setNewDebt({
+        name: debt.name,
+        description: debt.description || "",
+        totalAmount: String(debt.totalAmount),
+        creditor: debt.creditor,
+        debtor: debt.debtor,
+        dueDate: debt.dueDate || "",
+        interestRate: debt.interestRate ? String(debt.interestRate) : "",
+        loanType: debt.loanType || "term",
+        loanTermMonths: debt.loanTermMonths ? String(debt.loanTermMonths) : "",
+        category: debt.category,
+      });
+      setEditingDebt(debt);
+      setShowAddDebt(true);
+      return;
+    }
 
     setNewDebt({
       name: "",
@@ -82,9 +89,44 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
       debtor: "shared",
       dueDate: "",
       interestRate: "",
+      loanType: "term",
+      loanTermMonths: "",
       category: "",
     });
+    setEditingDebt(null);
     setShowAddDebt(false);
+  };
+
+  const handleSaveDebt = () => {
+    if (!newDebt.name || !newDebt.totalAmount || !newDebt.category) return;
+
+    const payload = {
+      name: newDebt.name,
+      description: newDebt.description || undefined,
+      totalAmount: parseFloat(newDebt.totalAmount),
+      creditor: newDebt.creditor,
+      debtor: newDebt.debtor,
+      dueDate: newDebt.dueDate || undefined,
+      interestRate: newDebt.interestRate ? parseFloat(newDebt.interestRate) : undefined,
+      loanType: newDebt.loanType,
+      loanTermMonths: newDebt.loanTermMonths ? parseInt(newDebt.loanTermMonths, 10) : undefined,
+      category: newDebt.category,
+    };
+
+    if (editingDebt) {
+      const amountDifference = payload.totalAmount - editingDebt.totalAmount;
+      const updatedRemaining = Math.max(0, editingDebt.remainingAmount + amountDifference);
+      updateDebt(editingDebt.id, { ...payload, remainingAmount: updatedRemaining });
+    } else {
+      addDebt({
+        ...payload,
+        remainingAmount: parseFloat(newDebt.totalAmount),
+      });
+    }
+
+    setEditingDebt(null);
+    setShowAddDebt(false);
+    resetDebtForm();
   };
 
   const handleMakePayment = () => {
@@ -137,18 +179,24 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
 
       <div className="flex items-center justify-between mb-6">
         <h1 className="font-display text-2xl font-bold">Debt Management</h1>
-        <Dialog open={showAddDebt} onOpenChange={setShowAddDebt}>
+        <Dialog open={showAddDebt} onOpenChange={(open) => {
+            if (!open) {
+              setEditingDebt(null);
+              resetDebtForm();
+            }
+            setShowAddDebt(open);
+          }}>
           <DialogTrigger asChild>
-            <Button size="sm">
+            <Button size="sm" onClick={() => resetDebtForm(null)}>
               <Plus className="h-4 w-4 mr-2" />
               Add Debt
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Add New Debt</DialogTitle>
+              <DialogTitle>{editingDebt ? "Edit Debt" : "Add New Debt"}</DialogTitle>
               <DialogDescription>
-                Track a new debt that needs to be paid off.
+                {editingDebt ? "Update debt details, loan type, and repayment period." : "Track a new debt that needs to be paid off."}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -250,10 +298,38 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
                   />
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="debt-loan-type">Loan Type</Label>
+                  <Select value={newDebt.loanType} onValueChange={(value: "term" | "30-day") =>
+                    setNewDebt(prev => ({ ...prev, loanType: value }))
+                  }>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="term">Term Loan</SelectItem>
+                      <SelectItem value="30-day">30-Day Loan</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="debt-loan-period">Loan Period (months)</Label>
+                  <Input
+                    id="debt-loan-period"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={newDebt.loanTermMonths}
+                    onChange={(e) => setNewDebt(prev => ({ ...prev, loanTermMonths: e.target.value }))}
+                    placeholder="12"
+                  />
+                </div>
+              </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleAddDebt} disabled={!newDebt.name || !newDebt.totalAmount || !newDebt.category}>
-                Add Debt
+              <Button onClick={handleSaveDebt} disabled={!newDebt.name || !newDebt.totalAmount || !newDebt.category}>
+                {editingDebt ? "Save Changes" : "Add Debt"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -344,6 +420,9 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
                       <CardTitle className="text-lg">{debt.name}</CardTitle>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => resetDebtForm(debt)}>
+                        Edit
+                      </Button>
                       <Dialog open={showPaymentDialog?.id === debt.id} onOpenChange={(open) =>
                         setShowPaymentDialog(open ? debt : null)
                       }>
@@ -468,6 +547,16 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
                   {debt.interestRate && (
                     <div className="text-xs text-muted-foreground">
                       Interest Rate: {debt.interestRate}%
+                    </div>
+                  )}
+                  {debt.loanType && (
+                    <div className="text-xs text-muted-foreground">
+                      Loan Type: {debt.loanType === "term" ? "Term Loan" : "30-Day Loan"}
+                    </div>
+                  )}
+                  {debt.loanTermMonths && (
+                    <div className="text-xs text-muted-foreground">
+                      Loan Period: {debt.loanTermMonths} month{debt.loanTermMonths === 1 ? "" : "s"}
                     </div>
                   )}
                 </CardContent>

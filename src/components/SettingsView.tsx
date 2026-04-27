@@ -4,8 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { CoupleProfile, BudgetConfig, PaymentMethod, DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, DEFAULT_INVESTMENT_CATEGORIES } from "@/types/budget";
-import { ArrowLeft, Heart, Wallet, Tag, Plus, X, CalendarDays, CreditCard, Pencil, Check, Download, Upload, AlertTriangle } from "lucide-react";
+import { CoupleProfile, BudgetConfig, PaymentMethod, DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, DEFAULT_INVESTMENT_CATEGORIES, CategoryNode, addSubcategory, findCategoryById, getAllCategoryIds } from "@/types/budget";
+import { ArrowLeft, Heart, Wallet, Tag, Plus, X, CalendarDays, CreditCard, Pencil, Check, Download, Upload, AlertTriangle, ChevronRight, ChevronDown, Trash2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/currency";
 import { downloadBackup, restoreFromBackup, parseBackupFile, BackupData } from "@/lib/backup";
@@ -63,6 +63,251 @@ function CategoryRow({ original, display, isCustom, onRename, onDelete }: Catego
   );
 }
 
+interface CategoryTreeManagerProps {
+  categoryTree: Record<string, CategoryNode[]>;
+  onUpdateTree: (type: 'expense' | 'income' | 'investment' | 'debt', newTree: CategoryNode[]) => void;
+}
+
+function CategoryTreeManager({ categoryTree, onUpdateTree }: CategoryTreeManagerProps) {
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [editingNode, setEditingNode] = useState<string | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryIcon, setNewCategoryIcon] = useState("");
+  const [addingToParent, setAddingToParent] = useState<string | null>(null);
+
+  const toggleExpanded = (nodeId: string) => {
+    const newExpanded = new Set(expandedNodes);
+    if (newExpanded.has(nodeId)) {
+      newExpanded.delete(nodeId);
+    } else {
+      newExpanded.add(nodeId);
+    }
+    setExpandedNodes(newExpanded);
+  };
+
+  const startEditing = (nodeId: string, currentName: string) => {
+    setEditingNode(nodeId);
+    setNewCategoryName(currentName);
+  };
+
+  const saveEdit = (type: 'expense' | 'income' | 'investment' | 'debt', nodeId: string) => {
+    if (!newCategoryName.trim()) return;
+
+    const tree = categoryTree[type] || [];
+    const updateNode = (nodes: CategoryNode[]): CategoryNode[] => {
+      return nodes.map(node => {
+        if (node.id === nodeId) {
+          return { ...node, name: newCategoryName.trim() };
+        }
+        if (node.children) {
+          return { ...node, children: updateNode(node.children) };
+        }
+        return node;
+      });
+    };
+
+    const updatedTree = updateNode(tree);
+    onUpdateTree(type, updatedTree);
+    setEditingNode(null);
+    setNewCategoryName("");
+  };
+
+  const deleteCategory = (type: 'expense' | 'income' | 'investment' | 'debt', nodeId: string) => {
+    const tree = categoryTree[type] || [];
+    const deleteNode = (nodes: CategoryNode[]): CategoryNode[] => {
+      return nodes.filter(node => {
+        if (node.id === nodeId) return false;
+        if (node.children) {
+          node.children = deleteNode(node.children);
+        }
+        return true;
+      });
+    };
+
+    const updatedTree = deleteNode(tree);
+    onUpdateTree(type, updatedTree);
+  };
+
+  const addCategory = (type: 'expense' | 'income' | 'investment' | 'debt', parentId?: string) => {
+    if (!newCategoryName.trim()) return;
+
+    const tree = categoryTree[type] || [];
+    let updatedTree: CategoryNode[];
+
+    if (parentId) {
+      updatedTree = addSubcategory(tree, parentId, newCategoryName.trim(), newCategoryIcon.trim() || undefined);
+    } else {
+      // Add root level category
+      const newNode: CategoryNode = {
+        id: crypto.randomUUID(),
+        name: newCategoryName.trim(),
+        icon: newCategoryIcon.trim() || undefined,
+        level: 0,
+        fullPath: newCategoryName.trim(),
+      };
+      updatedTree = [...tree, newNode];
+    }
+
+    onUpdateTree(type, updatedTree);
+    setNewCategoryName("");
+    setNewCategoryIcon("");
+    setAddingToParent(null);
+  };
+
+  const renderCategoryNode = (node: CategoryNode, type: 'expense' | 'income' | 'investment' | 'debt', depth = 0) => {
+    const isExpanded = expandedNodes.has(node.id);
+    const hasChildren = node.children && node.children.length > 0;
+    const isEditing = editingNode === node.id;
+    const isAdding = addingToParent === node.id;
+
+    return (
+      <div key={node.id} style={{ marginLeft: `${depth * 16}px` }}>
+        <div className="flex items-center gap-2 py-1">
+          {hasChildren && (
+            <button
+              onClick={() => toggleExpanded(node.id)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            </button>
+          )}
+          {!hasChildren && <div className="w-3" />}
+
+          {node.icon && <span className="text-sm">{node.icon}</span>}
+
+          {isEditing ? (
+            <Input
+              autoFocus
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && saveEdit(type, node.id)}
+              onBlur={() => saveEdit(type, node.id)}
+              className="h-7 text-sm flex-1"
+            />
+          ) : (
+            <span className="text-sm flex-1">{node.name}</span>
+          )}
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => startEditing(node.id, node.name)}
+              className="text-muted-foreground hover:text-foreground p-1"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button className="text-muted-foreground hover:text-destructive p-1">
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Category</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete "{node.name}"? This will also delete all subcategories and may affect existing transactions.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => deleteCategory(type, node.id)}>
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <button
+              onClick={() => setAddingToParent(node.id)}
+              className="text-muted-foreground hover:text-foreground p-1"
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+
+        {isAdding && (
+          <div className="flex items-center gap-2 py-1" style={{ marginLeft: `${(depth + 1) * 16}px` }}>
+            <Input
+              placeholder="New subcategory name"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              className="h-7 text-sm flex-1"
+            />
+            <Input
+              placeholder="Icon (optional)"
+              value={newCategoryIcon}
+              onChange={(e) => setNewCategoryIcon(e.target.value)}
+              className="h-7 text-sm w-16"
+              maxLength={2}
+            />
+            <Button size="sm" onClick={() => addCategory(type, node.id)}>Add</Button>
+            <Button size="sm" variant="outline" onClick={() => { setAddingToParent(null); setNewCategoryName(""); setNewCategoryIcon(""); }}>Cancel</Button>
+          </div>
+        )}
+
+        {hasChildren && isExpanded && (
+          <div>
+            {node.children!.map(child => renderCategoryNode(child, type, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderCategoryType = (type: 'expense' | 'income' | 'investment' | 'debt', title: string, icon: string) => {
+    const tree = categoryTree[type] || [];
+
+    return (
+      <div className="glass-card rounded-3xl p-6 space-y-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span>{icon}</span>
+          <span>{title} Categories ({getAllCategoryIds(tree).length})</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Manage categories with unlimited nesting. Changes save immediately.
+        </p>
+
+        <div className="space-y-1">
+          {tree.map(node => renderCategoryNode(node, type))}
+        </div>
+
+        <div className="flex gap-2 pt-2 border-t border-border">
+          <Input
+            placeholder={`New ${title.toLowerCase()} category`}
+            value={addingToParent === null ? newCategoryName : ""}
+            onChange={(e) => setNewCategoryName(e.target.value)}
+            className="flex-1"
+          />
+          <Input
+            placeholder="Icon"
+            value={addingToParent === null ? newCategoryIcon : ""}
+            onChange={(e) => setNewCategoryIcon(e.target.value)}
+            className="w-16"
+            maxLength={2}
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => addCategory(type)}
+            disabled={!newCategoryName.trim()}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      {renderCategoryType('expense', 'Expense', '💸')}
+      {renderCategoryType('income', 'Income', '💰')}
+      {renderCategoryType('investment', 'Investment', '📈')}
+      {renderCategoryType('debt', 'Debt', '💳')}
+    </div>
+  );
+}
+
 export default function SettingsView({
   profile, budgetConfig, onUpdateProfile, onUpdateBudgetConfig, onBack, getPartnerName,
 }: SettingsViewProps) {
@@ -103,6 +348,7 @@ export default function SettingsView({
     categoryLimits,
     paymentMethods,
     customInvestmentCategories: customInvestment,
+    categoryTree: budgetConfig.categoryTree,
     ...overrides,
   });
 
@@ -128,79 +374,7 @@ export default function SettingsView({
     return next;
   };
 
-  const renameCategory = (original: string, newName: string, kind: "expense" | "income", isCustom: boolean) => {
-    const trimmed = newName.trim();
-    if (!trimmed) return;
-
-    if (!isCustom) {
-      const nextRenames = trimmed === original
-        ? Object.fromEntries(Object.entries(renames).filter(([key]) => key !== original))
-        : { ...renames, [original]: trimmed };
-      setRenames(nextRenames);
-      persistBudgetConfig({ categoryRenames: nextRenames });
-      return;
-    }
-
-    const list = kind === "expense" ? customExpense : customIncome;
-    if (trimmed !== original && list.includes(trimmed)) return;
-
-    const nextList = list.map((item) => (item === original ? trimmed : item));
-    const nextExpense = kind === "expense" ? nextList : customExpense;
-    const nextIncome = kind === "income" ? nextList : customIncome;
-    const nextRenames = relinkRenames(renames, original, trimmed);
-    const nextCategoryLimits = { ...categoryLimits };
-
-    if (original !== trimmed && nextCategoryLimits[original] !== undefined) {
-      nextCategoryLimits[trimmed] = nextCategoryLimits[original];
-      delete nextCategoryLimits[original];
-    }
-
-    setCustomExpense(nextExpense);
-    setCustomIncome(nextIncome);
-    setRenames(nextRenames);
-    setCategoryLimits(nextCategoryLimits);
-    persistBudgetConfig({
-      customExpenseCategories: nextExpense,
-      customIncomeCategories: nextIncome,
-      categoryRenames: nextRenames,
-      categoryLimits: nextCategoryLimits,
-    });
-  };
-
   const displayName = (original: string) => renames[original] || original;
-
-  const addCustomExpense = () => {
-    const v = newExpenseCat.trim();
-    if (v && !customExpense.includes(v) && !DEFAULT_EXPENSE_CATEGORIES.includes(v as never)) {
-      const next = [...customExpense, v];
-      setCustomExpense(next);
-      persistBudgetConfig({ customExpenseCategories: next });
-      setNewExpenseCat("");
-    }
-  };
-  const addCustomIncome = () => {
-    const v = newIncomeCat.trim();
-    if (v && !customIncome.includes(v) && !DEFAULT_INCOME_CATEGORIES.includes(v as never)) {
-      const next = [...customIncome, v];
-      setCustomIncome(next);
-      persistBudgetConfig({ customIncomeCategories: next });
-      setNewIncomeCat("");
-    }
-  };
-  const addCustomInvestment = () => {
-    const v = newInvestmentCat.trim();
-    if (v && !customInvestment.includes(v) && !DEFAULT_INVESTMENT_CATEGORIES.includes(v as never)) {
-      const next = [...customInvestment, v];
-      setCustomInvestment(next);
-      persistBudgetConfig({ customInvestmentCategories: next });
-      setNewInvestmentCat("");
-    }
-  };
-  const deleteInvestmentCat = (cat: string) => {
-    const next = customInvestment.filter((c) => c !== cat);
-    setCustomInvestment(next);
-    persistBudgetConfig({ customInvestmentCategories: next });
-  };
   const addCategoryLimit = () => {
     if (newLimitCat.trim() && newLimitAmount) {
       const next = { ...categoryLimits, [newLimitCat.trim()]: parseFloat(newLimitAmount) };
@@ -208,29 +382,6 @@ export default function SettingsView({
       persistBudgetConfig({ categoryLimits: next });
       setNewLimitCat(""); setNewLimitAmount("");
     }
-  };
-
-  const deleteCategory = (category: string, kind: "expense" | "income") => {
-    const nextExpense = kind === "expense"
-      ? customExpense.filter((item) => item !== category)
-      : customExpense;
-    const nextIncome = kind === "income"
-      ? customIncome.filter((item) => item !== category)
-      : customIncome;
-    const nextRenames = Object.fromEntries(Object.entries(renames).filter(([key]) => key !== category));
-    const nextCategoryLimits = { ...categoryLimits };
-    delete nextCategoryLimits[category];
-
-    setCustomExpense(nextExpense);
-    setCustomIncome(nextIncome);
-    setRenames(nextRenames);
-    setCategoryLimits(nextCategoryLimits);
-    persistBudgetConfig({
-      customExpenseCategories: nextExpense,
-      customIncomeCategories: nextIncome,
-      categoryRenames: nextRenames,
-      categoryLimits: nextCategoryLimits,
-    });
   };
 
   const addPaymentMethod = () => {
@@ -291,9 +442,6 @@ export default function SettingsView({
       setTimeout(() => setBackupMessage(null), 5000);
     }
   };
-
-  const allExpense = [...DEFAULT_EXPENSE_CATEGORIES, ...customExpense];
-  const allIncome = [...DEFAULT_INCOME_CATEGORIES, ...customIncome];
 
   return (
     <motion.div
@@ -382,75 +530,19 @@ export default function SettingsView({
         </TabsContent>
 
         <TabsContent value="categories">
-          <div className="space-y-4">
-            <div className="glass-card rounded-3xl p-6 space-y-3">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Tag className="h-4 w-4 text-expense" />
-                <span>Expense Categories ({allExpense.length})</span>
-              </div>
-              <p className="text-xs text-muted-foreground">Add, rename, or delete categories here. Category changes save immediately.</p>
-              {allExpense.map((c) => (
-                <CategoryRow
-                  key={c}
-                  original={c}
-                  display={displayName(c)}
-                  isCustom={customExpense.includes(c)}
-                  onRename={(name) => renameCategory(c, name, "expense", customExpense.includes(c))}
-                  onDelete={customExpense.includes(c) ? () => deleteCategory(c, "expense") : undefined}
-                />
-              ))}
-              <div className="flex gap-2 pt-2">
-                <Input placeholder="e.g. 🐕 Pet Care" value={newExpenseCat} onChange={(e) => setNewExpenseCat(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCustomExpense()} className="flex-1" />
-                <Button size="sm" variant="secondary" onClick={addCustomExpense}><Plus className="h-4 w-4" /></Button>
-              </div>
-            </div>
-
-            <div className="glass-card rounded-3xl p-6 space-y-3">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Tag className="h-4 w-4 text-income" />
-                <span>Income Categories ({allIncome.length})</span>
-              </div>
-              <p className="text-xs text-muted-foreground">Custom categories are editable, and renamed labels are used across the app.</p>
-              {allIncome.map((c) => (
-                <CategoryRow
-                  key={c}
-                  original={c}
-                  display={displayName(c)}
-                  isCustom={customIncome.includes(c)}
-                  onRename={(name) => renameCategory(c, name, "income", customIncome.includes(c))}
-                  onDelete={customIncome.includes(c) ? () => deleteCategory(c, "income") : undefined}
-                />
-              ))}
-              <div className="flex gap-2 pt-2">
-                <Input placeholder="e.g. 🏘 Rental Income" value={newIncomeCat} onChange={(e) => setNewIncomeCat(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCustomIncome()} className="flex-1" />
-                <Button size="sm" variant="secondary" onClick={addCustomIncome}><Plus className="h-4 w-4" /></Button>
-              </div>
-            </div>
-            <div className="glass-card rounded-3xl p-6 space-y-3">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Tag className="h-4 w-4 text-primary" />
-                <span>Investment Categories ({[...DEFAULT_INVESTMENT_CATEGORIES, ...customInvestment].length})</span>
-              </div>
-              <p className="text-xs text-muted-foreground">Used when creating new investment accounts. Defaults include standard and Kenya-focused options.</p>
-              <div className="flex flex-wrap gap-2">
-                {DEFAULT_INVESTMENT_CATEGORIES.map((c) => (
-                  <span key={c} className="rounded-full bg-muted px-3 py-1 text-xs">{c}</span>
-                ))}
-                {customInvestment.map((c) => (
-                  <span key={c} className="rounded-full bg-primary/10 text-primary px-3 py-1 text-xs flex items-center gap-1">
-                    {c}
-                    <button onClick={() => deleteInvestmentCat(c)} className="hover:text-destructive">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Input placeholder="e.g. 🌾 Agribusiness" value={newInvestmentCat} onChange={(e) => setNewInvestmentCat(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCustomInvestment()} className="flex-1" />
-                <Button size="sm" variant="secondary" onClick={addCustomInvestment}><Plus className="h-4 w-4" /></Button>
-              </div>
-            </div>
-          </div>
+          <CategoryTreeManager
+            categoryTree={budgetConfig.categoryTree || {}}
+            onUpdateTree={(type, newTree) => {
+              const updatedConfig = {
+                ...budgetConfig,
+                categoryTree: {
+                  ...budgetConfig.categoryTree,
+                  [type]: newTree,
+                },
+              };
+              onUpdateBudgetConfig(updatedConfig);
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="payments">

@@ -52,6 +52,8 @@ export interface Debt {
   debtor: Partner | "shared"; // who owes the money
   dueDate?: string; // ISO
   interestRate?: number; // annual interest rate (percentage)
+  loanType?: "term" | "30-day";
+  loanTermMonths?: number;
   createdAt: string; // ISO
   lastPaymentDate?: string; // ISO
   isPaidOff: boolean;
