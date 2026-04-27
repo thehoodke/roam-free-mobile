@@ -1,9 +1,8 @@
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
 import {
   ArrowLeft, TrendingUp, Users, PieChart, Target, Activity,
   Trophy, Calendar as CalendarIcon, Sparkles, Wallet, CreditCard,
-  Flame, Repeat, ArrowUpDown,
+  Flame, Repeat, ArrowUpDown, Layers, ChevronDown, ChevronRight,
 } from "lucide-react";
 import {
   format, parseISO, startOfDay, endOfDay, startOfWeek, endOfWeek,
@@ -455,9 +454,7 @@ export default function StatsView({
   }, [rankedCategories, totalIncome, totalExpenses, frequency, dailyComparison]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
+    <div
       className="min-h-screen bg-background p-6 pb-24 mx-auto max-w-lg"
     >
       <button onClick={onBack} className="mb-6 flex items-center gap-2 text-muted-foreground">
@@ -1045,7 +1042,7 @@ export default function StatsView({
           No expense data yet for {rangeLabel}. Add some transactions to see stats!
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }
 
