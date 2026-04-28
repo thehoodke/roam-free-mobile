@@ -151,6 +151,111 @@ export function useBudgetStore() {
     setTransactions((prev) => prev.filter((t) => t.id !== id && t.parentId !== id));
   }, []);
 
+  const updateTransaction = useCallback((updatedTx: Transaction) => {
+    setTransactions((prev) => {
+      const oldTx = prev.find((t) => t.id === updatedTx.id);
+      if (!oldTx) return prev;
+
+      // Handle balance adjustments
+      if (oldTx.type === "transfer") {
+        // For transfers, find the pair transaction
+        const isTransferOut = oldTx.id.endsWith('-out');
+        const pairId = isTransferOut ? oldTx.id.replace('-out', '-in') : oldTx.id.replace('-in', '-out');
+        const pairTx = prev.find((t) => t.id === pairId);
+
+        if (pairTx) {
+          // Revert old transfer balances
+          const oldFee = oldTx.transactionCost ?? 0;
+          adjustBalance(oldTx.paymentMethodId!, oldTx.partner, oldTx.amount); // Add back the sent amount
+          adjustBalance(pairTx.paymentMethodId!, pairTx.partner, -pairTx.amount); // Subtract the received amount
+        }
+      } else {
+        // For regular transactions, revert old balance adjustment
+        if (oldTx.paymentMethodId) {
+          const oldFee = oldTx.transactionCost ?? 0;
+          if (oldTx.type === "income") {
+            adjustBalance(oldTx.paymentMethodId, oldTx.partner, -(oldTx.amount - oldFee));
+          } else if (oldTx.type === "expense") {
+            adjustBalance(oldTx.paymentMethodId, oldTx.partner, oldTx.amount + oldFee);
+          }
+        }
+      }
+
+      // Apply new balance adjustments
+      if (updatedTx.type === "transfer") {
+        // For transfers, find the pair transaction in the updated data
+        const isTransferOut = updatedTx.id.endsWith('-out');
+        const pairId = isTransferOut ? updatedTx.id.replace('-out', '-in') : updatedTx.id.replace('-in', '-out');
+        const pairTx = prev.find((t) => t.id === pairId);
+
+        if (pairTx) {
+          // Apply new transfer balances
+          const newFee = updatedTx.transactionCost ?? 0;
+          const sentAmount = updatedTx.amount;
+          const receivedAmount = Math.max(0, sentAmount - (newFee * 2)); // Fee is split between both transactions
+
+          adjustBalance(updatedTx.paymentMethodId!, updatedTx.partner, -sentAmount); // Subtract sent amount
+          adjustBalance(pairTx.paymentMethodId!, pairTx.partner, receivedAmount); // Add received amount
+        }
+      } else {
+        // For regular transactions, apply new balance adjustment
+        if (updatedTx.paymentMethodId) {
+          const newFee = updatedTx.transactionCost ?? 0;
+          if (updatedTx.type === "income") {
+            adjustBalance(updatedTx.paymentMethodId, updatedTx.partner, updatedTx.amount - newFee);
+          } else if (updatedTx.type === "expense") {
+            adjustBalance(updatedTx.paymentMethodId, updatedTx.partner, -(updatedTx.amount + newFee));
+          }
+        }
+      }
+
+      // Update transaction and handle fee transaction
+      const updated = prev.map((t) => {
+        if (t.id === updatedTx.id) {
+          return updatedTx;
+        }
+        if (t.parentId === updatedTx.id) {
+          // Update fee transaction
+          return {
+            ...t,
+            amount: updatedTx.transactionCost ?? 0,
+            description: `Fee for ${updatedTx.description || updatedTx.category}`,
+            partner: updatedTx.partner,
+            date: updatedTx.date,
+            paymentMethodId: updatedTx.paymentMethodId,
+          };
+        }
+        return t;
+      });
+
+      // If transaction cost changed, add or remove fee transaction
+      const hasFee = updatedTx.transactionCost && updatedTx.transactionCost > 0;
+      const existingFee = updated.find((t) => t.parentId === updatedTx.id);
+
+      if (hasFee && !existingFee) {
+        // Add new fee transaction
+        const feeTx: Transaction = {
+          id: crypto.randomUUID(),
+          amount: updatedTx.transactionCost,
+          type: "expense",
+          category: "💸 Transaction Fees",
+          description: `Fee for ${updatedTx.description || updatedTx.category}`,
+          partner: updatedTx.partner,
+          date: updatedTx.date,
+          paymentMethodId: updatedTx.paymentMethodId,
+          isFee: true,
+          parentId: updatedTx.id,
+        };
+        return [feeTx, ...updated];
+      } else if (!hasFee && existingFee) {
+        // Remove fee transaction
+        return updated.filter((t) => t.id !== existingFee.id);
+      }
+
+      return updated;
+    });
+  }, [adjustBalance]);
+
   const updateProfile = useCallback((p: CoupleProfile) => {
     setProfile(p);
   }, []);
@@ -376,6 +481,7 @@ export function useBudgetStore() {
     budgetConfig,
     addTransaction,
     deleteTransaction,
+    updateTransaction,
     updateProfile,
     updateBudgetConfig,
     getPartnerName,

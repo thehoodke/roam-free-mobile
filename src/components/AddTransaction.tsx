@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, ArrowRightLeft } from "lucide-react";
+import { Plus, X, ArrowRightLeft, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
 import { Partner, Transaction, PaymentMethod, CategoryNode } from "@/types/budget";
 
 interface AddTransactionProps {
@@ -21,6 +24,9 @@ interface AddTransactionProps {
   incomeCategories: CategoryNode[];
   paymentMethods: PaymentMethod[];
   getCategoryDisplayName: (categoryId: string, type: 'expense' | 'income') => string;
+  editingTransaction?: Transaction | null;
+  onUpdate?: (tx: Transaction) => void;
+  onCancelEdit?: () => void;
 }
 
 export default function AddTransaction({
@@ -31,6 +37,9 @@ export default function AddTransaction({
   incomeCategories,
   paymentMethods,
   getCategoryDisplayName,
+  editingTransaction,
+  onUpdate,
+  onCancelEdit,
 }: AddTransactionProps) {
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<"income" | "expense" | "transfer">("expense");
@@ -41,6 +50,7 @@ export default function AddTransaction({
   const [paymentMethodId, setPaymentMethodId] = useState<string>(paymentMethods[0]?.id || "");
   const [transactionCost, setTransactionCost] = useState("");
   const [transferToAccountId, setTransferToAccountId] = useState<string>("");
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const categories = type === "expense" ? expenseCategories : incomeCategories;
   const flattenedCategories = useMemo(() => {
@@ -69,33 +79,115 @@ export default function AddTransaction({
     }
   }, [paymentMethodId, paymentMethods]);
 
+  // Initialize form for editing
+  useEffect(() => {
+    if (editingTransaction && open) {
+      setType(editingTransaction.type);
+      setAmount(editingTransaction.amount.toString());
+      setCategory(editingTransaction.category);
+      setDescription(editingTransaction.description || "");
+      setPartner(editingTransaction.partner);
+      setPaymentMethodId(editingTransaction.paymentMethodId || paymentMethods[0]?.id || "");
+      setTransactionCost(editingTransaction.transactionCost?.toString() || "");
+      setSelectedDate(new Date(editingTransaction.date));
+      if (editingTransaction.type === "transfer") {
+        setTransferToAccountId(editingTransaction.transferToAccountId || "");
+      }
+    } else if (!editingTransaction && open) {
+      // Reset form for new transaction
+      setType("expense");
+      setAmount("");
+      setCategory("");
+      setDescription("");
+      setPartner("A");
+      setPaymentMethodId(paymentMethods[0]?.id || "");
+      setTransactionCost("");
+      setTransferToAccountId("");
+      setSelectedDate(new Date());
+    }
+  }, [editingTransaction, open, paymentMethods]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (type === "transfer") {
-      if (!amount || !paymentMethodId || !transferToAccountId || !onAddTransfer) return;
+      if (!amount || !paymentMethodId || !transferToAccountId) return;
 
-      onAddTransfer(
-        paymentMethodId,
-        transferToAccountId,
-        parseFloat(amount),
-        partner,
-        description,
-        selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : undefined
-      );
+      if (editingTransaction && onUpdate) {
+        // Editing existing transfer - need to update both transfer-out and transfer-in
+        const fee = selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : 0;
+        const receivedAmount = Math.max(0, parseFloat(amount) - fee);
+
+        // Find the related transfer transaction (the pair)
+        const isTransferOut = editingTransaction.id.endsWith('-out');
+        const pairId = isTransferOut ? editingTransaction.id.replace('-out', '-in') : editingTransaction.id.replace('-in', '-out');
+        
+        // Update the transfer-out transaction
+        const transferOutData = {
+          ...editingTransaction,
+          amount: parseFloat(amount),
+          description: `Transfer to ${transferToAccountId}: ${description}`,
+          partner,
+          date: selectedDate.toISOString(),
+          paymentMethodId,
+          transactionCost: fee ? fee / 2 : undefined,
+          transferFromAccountId: paymentMethodId,
+          transferToAccountId,
+        };
+
+        // Update the transfer-in transaction
+        const transferInData = {
+          id: pairId,
+          amount: receivedAmount,
+          type: "transfer" as const,
+          category: "transfer",
+          description: `Transfer from ${paymentMethodId}: ${description}`,
+          partner,
+          date: selectedDate.toISOString(),
+          paymentMethodId: transferToAccountId,
+          transactionCost: fee ? fee / 2 : undefined,
+          transferFromAccountId: paymentMethodId,
+          transferToAccountId,
+          isFee: false,
+        };
+
+        onUpdate(transferOutData);
+        onUpdate(transferInData);
+      } else if (onAddTransfer) {
+        // Adding new transfer
+        onAddTransfer(
+          paymentMethodId,
+          transferToAccountId,
+          parseFloat(amount),
+          partner,
+          description,
+          selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : undefined
+        );
+      }
     } else {
       if (!amount || !category) return;
 
-      onAdd({
+      const transactionData = {
         amount: parseFloat(amount),
         type,
         category,
         description,
         partner,
-        date: new Date().toISOString(),
+        date: selectedDate.toISOString(),
         paymentMethodId: paymentMethodId || undefined,
         transactionCost: selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : undefined,
-      });
+      };
+
+      if (editingTransaction && onUpdate) {
+        // Editing existing transaction
+        onUpdate({
+          ...editingTransaction,
+          ...transactionData,
+        });
+      } else {
+        // Adding new transaction
+        onAdd(transactionData);
+      }
     }
 
     // Reset form
@@ -135,10 +227,27 @@ export default function AddTransaction({
               className="w-full max-w-lg rounded-t-3xl bg-card p-6 pb-10 shadow-xl max-h-[90vh] overflow-y-auto"
             >
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-display text-xl font-bold">Add Transaction</h2>
-                <button onClick={() => setOpen(false)} className="text-muted-foreground">
-                  <X className="h-5 w-5" />
-                </button>
+                <h2 className="font-display text-xl font-bold">
+                  {editingTransaction ? "Edit Transaction" : "Add Transaction"}
+                </h2>
+                <div className="flex gap-2">
+                  {editingTransaction && onCancelEdit && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        onCancelEdit();
+                        setOpen(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                  <button onClick={() => setOpen(false)} className="text-muted-foreground">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -311,6 +420,29 @@ export default function AddTransaction({
                 </div>
 
                 <div>
+                  <Label>Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-left font-normal mt-1"
+                      >
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {format(selectedDate, "PPP")}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={(date) => date && setSelectedDate(date)}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div>
                   <Label>Who paid?</Label>
                   <div className="mt-1 flex gap-2">
                     <button
@@ -339,7 +471,7 @@ export default function AddTransaction({
                 </div>
 
                 <Button type="submit" className="w-full" size="lg">
-                  Add {type === "expense" ? "Expense" : type === "income" ? "Income" : "Transfer"}
+                  {initialTransaction ? "Update" : "Add"} {type === "expense" ? "Expense" : type === "income" ? "Income" : "Transfer"}
                 </Button>
               </form>
             </motion.div>

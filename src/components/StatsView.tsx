@@ -145,7 +145,7 @@ export default function StatsView({
     });
   };
 
-  const renderExpenseCategoryRows = (nodes: Array<CategoryNode & { ownAmount: number; totalAmount: number; children?: any[] }>, depth = 0) => {
+  const renderExpenseCategoryRows = (nodes: Array<CategoryNode & { ownAmount: number; totalAmount: number; children?: CategoryNode[] }>, depth = 0) => {
     return nodes.map((node) => (
       <div key={node.id} className="space-y-2">
         <div className="flex items-center justify-between rounded-2xl bg-muted p-3" style={{ paddingLeft: `${depth * 16 + 16}px` }}>
@@ -178,7 +178,7 @@ export default function StatsView({
 
   const renderedCategoryRows = useMemo(() => {
     const rows: Array<{ id: string; category: string; total: number; depth: number; isLeaf: boolean }> = [];
-    const traverse = (nodes: Array<CategoryNode & { ownAmount: number; totalAmount: number; children?: any[] }>, depth = 0) => {
+    const traverse = (nodes: Array<CategoryNode & { ownAmount: number; totalAmount: number; children?: CategoryNode[] }>, depth = 0) => {
       nodes.forEach((node) => {
         rows.push({
           id: node.id,

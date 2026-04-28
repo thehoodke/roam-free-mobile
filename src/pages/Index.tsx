@@ -25,6 +25,7 @@ const Index = () => {
     addTransaction,
     addTransferTransaction,
     deleteTransaction,
+    updateTransaction,
     updateProfile,
     updateBudgetConfig,
     getPartnerName,
@@ -48,6 +49,16 @@ const Index = () => {
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [view, setView] = useState<View>("home");
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+  const handleEditTransaction = (tx: Transaction) => {
+    setEditingTransaction(tx);
+  };
+
+  const handleUpdateTransaction = (updatedTx: Transaction) => {
+    updateTransaction(updatedTx);
+    setEditingTransaction(null);
+  };
 
   const monthKey = format(currentMonth, "yyyy-MM");
   const monthLabel = format(currentMonth, "MMMM yyyy");
@@ -214,6 +225,7 @@ const Index = () => {
             transactions={monthTransactions}
             getPartnerName={getPartnerName}
             onDelete={deleteTransaction}
+            onEdit={handleEditTransaction}
             displayCategory={displayCategory}
             getPaymentMethod={getPaymentMethod}
           />
@@ -228,6 +240,9 @@ const Index = () => {
         incomeCategories={getCategoryTree('income')}
         paymentMethods={paymentMethods}
         getCategoryDisplayName={getCategoryDisplayName}
+        editingTransaction={editingTransaction}
+        onUpdate={handleUpdateTransaction}
+        onCancelEdit={() => setEditingTransaction(null)}
       />
     </div>
   );

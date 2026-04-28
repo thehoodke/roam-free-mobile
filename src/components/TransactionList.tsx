@@ -1,6 +1,6 @@
 import { Transaction, Partner, PaymentMethod } from "@/types/budget";
 import { motion } from "framer-motion";
-import { Trash2 } from "lucide-react";
+import { Trash2, Edit } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/currency";
 
@@ -8,6 +8,7 @@ interface TransactionListProps {
   transactions: Transaction[];
   getPartnerName: (p: Partner) => string;
   onDelete: (id: string) => void;
+  onEdit?: (tx: Transaction) => void;
   displayCategory?: (c: string) => string;
   getPaymentMethod?: (id?: string) => PaymentMethod | undefined;
 }
@@ -16,6 +17,7 @@ export default function TransactionList({
   transactions,
   getPartnerName,
   onDelete,
+  onEdit,
   displayCategory = (c) => c,
   getPaymentMethod,
 }: TransactionListProps) {
@@ -63,12 +65,22 @@ export default function TransactionList({
               </p>
               {tx.isFee && <p className="text-[10px] text-muted-foreground">fee</p>}
             </div>
-            <button
-              onClick={() => onDelete(tx.id)}
-              className="ml-1 text-muted-foreground/50 hover:text-destructive transition-colors"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            <div className="flex gap-1">
+              {onEdit && !tx.isFee && !tx.id.endsWith('-in') && (
+                <button
+                  onClick={() => onEdit(tx)}
+                  className="text-muted-foreground/50 hover:text-foreground transition-colors"
+                >
+                  <Edit className="h-4 w-4" />
+                </button>
+              )}
+              <button
+                onClick={() => onDelete(tx.id)}
+                className="text-muted-foreground/50 hover:text-destructive transition-colors"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
           </motion.div>
         );
       })}
