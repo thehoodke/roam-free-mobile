@@ -51,7 +51,7 @@ export default function TransactionList({
                 {tx.description || cat}
               </p>
               <p className="text-xs text-muted-foreground truncate">
-                {getPartnerName(tx.partner)} · {format(new Date(tx.date), "MMM d")}
+                {getPartnerName(tx.partner)} · {format(new Date(tx.date), "MMM d, yyyy")}
                 {pm && <> · {pm.icon} {pm.name}</>}
               </p>
             </div>

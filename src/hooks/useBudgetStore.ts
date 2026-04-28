@@ -434,7 +434,8 @@ export function useBudgetStore() {
     amount: number,
     partner: Partner,
     description: string,
-    transactionCost?: number
+    transactionCost?: number,
+    date: string = new Date().toISOString()
   ) => {
     const transferId = crypto.randomUUID();
     const fee = transactionCost ?? 0;
@@ -447,7 +448,7 @@ export function useBudgetStore() {
       category: "transfer",
       description: `Transfer to ${toAccountId}: ${description}`,
       partner,
-      date: new Date().toISOString(),
+      date,
       paymentMethodId: fromAccountId,
       transactionCost: fee ? fee / 2 : undefined,
       transferFromAccountId: fromAccountId,
@@ -461,7 +462,7 @@ export function useBudgetStore() {
       category: "transfer",
       description: `Transfer from ${fromAccountId}: ${description}`,
       partner,
-      date: new Date().toISOString(),
+      date,
       paymentMethodId: toAccountId,
       transactionCost: fee ? fee / 2 : undefined,
       transferFromAccountId: fromAccountId,

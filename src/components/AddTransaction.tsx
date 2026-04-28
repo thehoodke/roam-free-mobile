@@ -81,7 +81,8 @@ export default function AddTransaction({
 
   // Initialize form for editing
   useEffect(() => {
-    if (editingTransaction && open) {
+    if (editingTransaction) {
+      setOpen(true);
       setType(editingTransaction.type);
       setAmount(editingTransaction.amount.toString());
       setCategory(editingTransaction.category);
@@ -93,8 +94,8 @@ export default function AddTransaction({
       if (editingTransaction.type === "transfer") {
         setTransferToAccountId(editingTransaction.transferToAccountId || "");
       }
-    } else if (!editingTransaction && open) {
-      // Reset form for new transaction
+    } else if (open) {
+      // Reset form for new transaction or when editing is cancelled
       setType("expense");
       setAmount("");
       setCategory("");
@@ -161,7 +162,8 @@ export default function AddTransaction({
           parseFloat(amount),
           partner,
           description,
-          selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : undefined
+          selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : undefined,
+          selectedDate.toISOString()
         );
       }
     } else {
@@ -471,7 +473,7 @@ export default function AddTransaction({
                 </div>
 
                 <Button type="submit" className="w-full" size="lg">
-                  {initialTransaction ? "Update" : "Add"} {type === "expense" ? "Expense" : type === "income" ? "Income" : "Transfer"}
+                  {editingTransaction ? "Update" : "Add"} {type === "expense" ? "Expense" : type === "income" ? "Income" : "Transfer"}
                 </Button>
               </form>
             </motion.div>

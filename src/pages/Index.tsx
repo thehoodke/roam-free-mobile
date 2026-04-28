@@ -61,7 +61,7 @@ const Index = () => {
   };
 
   const monthKey = format(currentMonth, "yyyy-MM");
-  const monthLabel = format(currentMonth, "MMMM yyyy");
+  const monthLabel = format(currentMonth, "PPP");
   const totals = getTotals(monthKey);
   const monthTransactions = getMonthTransactions(monthKey);
   const investFlow = investments.getMonthInvestmentFlow(monthKey);
