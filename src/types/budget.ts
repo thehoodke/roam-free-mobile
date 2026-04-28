@@ -31,6 +31,14 @@ export interface Transaction {
   parentId?: string;        // links fee to source txn
   transferToAccountId?: string; // for transfers: destination account
   transferFromAccountId?: string; // for transfers: source account
+  bundleItems?: TransactionBundleItem[]; // for bundle transactions
+}
+
+export interface TransactionBundleItem {
+  id: string;
+  category: string;
+  description: string;
+  amount: number;
 }
 
 export interface AccountBalance {
@@ -69,6 +77,7 @@ export interface DebtPayment {
   transactionCost?: number;
   note?: string;
   transactionId?: string; // link to the actual transaction
+  type: "payment" | "topup"; // payment reduces debt, topup increases debt
 }
 
 export interface BudgetGoal {

@@ -116,6 +116,72 @@ export function useBudgetStore() {
 
   const addTransaction = useCallback((tx: Omit<Transaction, "id">) => {
     const id = crypto.randomUUID();
+
+    // If this is a bundle transaction, create individual transactions for each item
+    if (tx.bundleItems && tx.bundleItems.length > 0) {
+      const bundleTransactions: Transaction[] = [];
+      let totalFee = tx.transactionCost || 0;
+
+      tx.bundleItems.forEach((item) => {
+        const itemId = crypto.randomUUID();
+        const itemTx: Transaction = {
+          id: itemId,
+          amount: item.amount,
+          type: tx.type,
+          category: item.category,
+          description: item.description || `${tx.description || "Bundle item"} - ${item.category}`,
+          partner: tx.partner,
+          date: tx.date,
+          paymentMethodId: tx.paymentMethodId,
+          parentId: id, // Link to the bundle parent
+        };
+        bundleTransactions.push(itemTx);
+
+        // Update balance for each bundle item
+        if (tx.paymentMethodId) {
+          if (tx.type === "income") {
+            adjustBalance(tx.paymentMethodId, tx.partner, item.amount);
+          } else if (tx.type === "expense") {
+            adjustBalance(tx.paymentMethodId, tx.partner, -item.amount);
+          }
+        }
+      });
+
+      // Create the main bundle transaction (for display purposes)
+      const mainTx: Transaction = {
+        ...tx,
+        id,
+        bundleItems: tx.bundleItems,
+      };
+      bundleTransactions.push(mainTx);
+
+      // Handle transaction fee if any
+      if (totalFee > 0) {
+        const feeTx: Transaction = {
+          id: crypto.randomUUID(),
+          amount: totalFee,
+          type: "expense",
+          category: "💸 Transaction Fees",
+          description: `Fee for ${tx.description || "bundle transaction"}`,
+          partner: tx.partner,
+          date: tx.date,
+          paymentMethodId: tx.paymentMethodId,
+          isFee: true,
+          parentId: id,
+        };
+        bundleTransactions.unshift(feeTx);
+
+        // Adjust balance for fee
+        if (tx.paymentMethodId) {
+          adjustBalance(tx.paymentMethodId, tx.partner, -totalFee);
+        }
+      }
+
+      setTransactions((prev) => [...bundleTransactions, ...prev]);
+      return;
+    }
+
+    // Regular single transaction
     const newTx: Transaction = { ...tx, id };
     setTransactions((prev) => {
       const next = [newTx, ...prev];
@@ -148,7 +214,23 @@ export function useBudgetStore() {
   }, [adjustBalance]);
 
   const deleteTransaction = useCallback((id: string) => {
-    setTransactions((prev) => prev.filter((t) => t.id !== id && t.parentId !== id));
+    setTransactions((prev) => {
+      const txToDelete = prev.find((t) => t.id === id);
+      if (!txToDelete) return prev;
+
+      // If this is a bundle transaction, delete all bundle items too
+      if (txToDelete.bundleItems && txToDelete.bundleItems.length > 0) {
+        const bundleItemIds = txToDelete.bundleItems.map(item => item.id);
+        const relatedTxIds = prev
+          .filter(t => t.parentId === id || bundleItemIds.includes(t.id))
+          .map(t => t.id);
+
+        return prev.filter((t) => !relatedTxIds.includes(t.id) && t.id !== id);
+      }
+
+      // Regular transaction deletion
+      return prev.filter((t) => t.id !== id && t.parentId !== id);
+    });
   }, []);
 
   const updateTransaction = useCallback((updatedTx: Transaction) => {

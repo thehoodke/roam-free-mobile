@@ -58,7 +58,8 @@ export function useDebtStore() {
     paymentMethodId?: string,
     transactionCost?: number,
     note?: string,
-    transactionId?: string
+    transactionId?: string,
+    type: "payment" | "topup" = "payment"
   ) => {
     const payment: DebtPayment = {
       id: crypto.randomUUID(),
@@ -69,6 +70,7 @@ export function useDebtStore() {
       transactionCost,
       note,
       transactionId,
+      type,
     };
 
     setDebtPayments((prev) => [payment, ...prev]);
@@ -77,10 +79,14 @@ export function useDebtStore() {
     setDebts((prev) =>
       prev.map((debt) => {
         if (debt.id === debtId) {
-          const newRemaining = Math.max(0, debt.remainingAmount - amount);
+          const amountChange = type === "payment" ? -amount : amount;
+          const newRemaining = Math.max(0, debt.remainingAmount + amountChange);
+          const newTotal = type === "topup" ? debt.totalAmount + amount : debt.totalAmount;
+
           return {
             ...debt,
             remainingAmount: newRemaining,
+            totalAmount: newTotal,
             lastPaymentDate: payment.date,
             isPaidOff: newRemaining === 0,
           };

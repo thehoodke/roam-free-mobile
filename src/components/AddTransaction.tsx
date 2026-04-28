@@ -14,7 +14,8 @@ import {
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { Partner, Transaction, PaymentMethod, CategoryNode } from "@/types/budget";
+import { formatCurrency } from "@/lib/currency";
+import { Partner, Transaction, PaymentMethod, CategoryNode, TransactionBundleItem } from "@/types/budget";
 
 interface AddTransactionProps {
   onAdd: (tx: Omit<Transaction, "id">) => void;
@@ -51,6 +52,13 @@ export default function AddTransaction({
   const [transactionCost, setTransactionCost] = useState("");
   const [transferToAccountId, setTransferToAccountId] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [isBundleMode, setIsBundleMode] = useState(false);
+  const [bundleItems, setBundleItems] = useState<TransactionBundleItem[]>([]);
+  const [currentBundleItem, setCurrentBundleItem] = useState({
+    category: "",
+    description: "",
+    amount: "",
+  });
 
   const categories = type === "expense" ? expenseCategories : incomeCategories;
   const flattenedCategories = useMemo(() => {
@@ -67,6 +75,27 @@ export default function AddTransaction({
     () => paymentMethods.find((p) => p.id === paymentMethodId),
     [paymentMethods, paymentMethodId]
   );
+
+  const bundleTotal = bundleItems.reduce((sum, item) => sum + item.amount, 0);
+  const remainingAmount = type !== "transfer" && amount ? parseFloat(amount) - bundleTotal : 0;
+
+  const addBundleItem = () => {
+    if (!currentBundleItem.category || !currentBundleItem.amount) return;
+
+    const newItem: TransactionBundleItem = {
+      id: crypto.randomUUID(),
+      category: currentBundleItem.category,
+      description: currentBundleItem.description,
+      amount: parseFloat(currentBundleItem.amount),
+    };
+
+    setBundleItems(prev => [...prev, newItem]);
+    setCurrentBundleItem({ category: "", description: "", amount: "" });
+  };
+
+  const removeBundleItem = (id: string) => {
+    setBundleItems(prev => prev.filter(item => item.id !== id));
+  };
 
   useEffect(() => {
     if (!paymentMethods.length) {
@@ -105,6 +134,9 @@ export default function AddTransaction({
       setTransactionCost("");
       setTransferToAccountId("");
       setSelectedDate(new Date());
+      setIsBundleMode(false);
+      setBundleItems([]);
+      setCurrentBundleItem({ category: "", description: "", amount: "" });
     }
   }, [editingTransaction, open, paymentMethods]);
 
@@ -178,6 +210,7 @@ export default function AddTransaction({
         date: selectedDate.toISOString(),
         paymentMethodId: paymentMethodId || undefined,
         transactionCost: selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : undefined,
+        bundleItems: isBundleMode && bundleItems.length > 0 ? bundleItems : undefined,
       };
 
       if (editingTransaction && onUpdate) {
@@ -288,8 +321,27 @@ export default function AddTransaction({
                   </button>
                 </div>
 
+                {type !== "transfer" && (
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Bundle Mode</Label>
+                    <button
+                      type="button"
+                      onClick={() => setIsBundleMode(!isBundleMode)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        isBundleMode ? "bg-primary" : "bg-muted"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          isBundleMode ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                )}
+
                 <div>
-                  <Label htmlFor="amount">Amount</Label>
+                  <Label htmlFor="amount">Total Amount</Label>
                   <Input
                     id="amount"
                     type="number"
@@ -301,9 +353,14 @@ export default function AddTransaction({
                     className="mt-1 text-2xl font-bold"
                     required
                   />
+                  {isBundleMode && bundleItems.length > 0 && (
+                    <div className="mt-2 text-sm text-muted-foreground">
+                      Allocated: {formatCurrency(bundleTotal)} | Remaining: {formatCurrency(remainingAmount)}
+                    </div>
+                  )}
                 </div>
 
-                {type !== "transfer" && (
+                {type !== "transfer" && !isBundleMode && (
                   <div>
                     <Label>Category</Label>
                     <Select value={category} onValueChange={setCategory} required>
@@ -318,6 +375,98 @@ export default function AddTransaction({
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+
+                {type !== "transfer" && isBundleMode && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-medium">Bundle Items</Label>
+                      <span className="text-xs text-muted-foreground">{bundleItems.length} items</span>
+                    </div>
+
+                    {/* Add bundle item form */}
+                    <div className="space-y-3 p-3 bg-muted/50 rounded-lg">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">Category</Label>
+                          <Select value={currentBundleItem.category} onValueChange={(value) =>
+                            setCurrentBundleItem(prev => ({ ...prev, category: value }))
+                          }>
+                            <SelectTrigger className="h-8">
+                              <SelectValue placeholder="Category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {flattenedCategories.map((c) => (
+                                <SelectItem key={c.id} value={c.id}>
+                                  {c.fullPath}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Amount</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="0.00"
+                            value={currentBundleItem.amount}
+                            onChange={(e) => setCurrentBundleItem(prev => ({ ...prev, amount: e.target.value }))}
+                            className="h-8"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Description (Optional)</Label>
+                        <Input
+                          placeholder="Item description"
+                          value={currentBundleItem.description}
+                          onChange={(e) => setCurrentBundleItem(prev => ({ ...prev, description: e.target.value }))}
+                          className="h-8"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={addBundleItem}
+                        disabled={!currentBundleItem.category || !currentBundleItem.amount}
+                        className="w-full"
+                      >
+                        Add Item
+                      </Button>
+                    </div>
+
+                    {/* Bundle items list */}
+                    {bundleItems.length > 0 && (
+                      <div className="space-y-2">
+                        {bundleItems.map((item) => {
+                          const cat = flattenedCategories.find(c => c.id === item.category);
+                          return (
+                            <div key={item.id} className="flex items-center justify-between p-2 bg-background rounded border">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">
+                                  {item.description || (cat?.fullPath || item.category)}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {formatCurrency(item.amount)}
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => removeBundleItem(item.id)}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
 

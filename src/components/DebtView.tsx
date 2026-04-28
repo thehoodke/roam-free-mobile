@@ -40,6 +40,8 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
   const [showAddDebt, setShowAddDebt] = useState(false);
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState<Debt | null>(null);
+  const [showTopupDialog, setShowTopupDialog] = useState<Debt | null>(null);
+  const [paymentType, setPaymentType] = useState<"payment" | "topup">("payment");
   const [newDebt, setNewDebt] = useState({
     name: "",
     description: "",
@@ -58,6 +60,7 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
     paymentMethodId: "",
     transactionCost: "",
     note: "",
+    type: "payment" as "payment" | "topup",
   });
 
   const debtCategories = getCategoryTree('debt');
@@ -130,14 +133,19 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
   };
 
   const handleMakePayment = () => {
-    if (!showPaymentDialog || !paymentData.amount) return;
+    if ((!showPaymentDialog && !showTopupDialog) || !paymentData.amount) return;
+
+    const targetDebt = showPaymentDialog || showTopupDialog;
+    if (!targetDebt) return;
 
     makeDebtPayment(
-      showPaymentDialog.id,
+      targetDebt.id,
       parseFloat(paymentData.amount),
       paymentData.paymentMethodId || undefined,
       paymentData.transactionCost ? parseFloat(paymentData.transactionCost) : undefined,
-      paymentData.note || undefined
+      paymentData.note || undefined,
+      undefined, // transactionId
+      paymentData.type
     );
 
     setPaymentData({
@@ -145,8 +153,10 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
       paymentMethodId: "",
       transactionCost: "",
       note: "",
+      type: "payment",
     });
     setShowPaymentDialog(null);
+    setShowTopupDialog(null);
   };
 
   const getDebtStatus = (debt: Debt) => {
@@ -495,6 +505,50 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
                           </DialogFooter>
                         </DialogContent>
                       </Dialog>
+                      <Dialog open={showTopupDialog?.id === debt.id} onOpenChange={(open) =>
+                        setShowTopupDialog(open ? debt : null)
+                      }>
+                        <DialogTrigger asChild>
+                          <Button size="sm" variant="outline">
+                            <Plus className="h-4 w-4 mr-1" />
+                            Top Up
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Top Up Debt - {debt.name}</DialogTitle>
+                            <DialogDescription>
+                              Add more to this debt amount (e.g., additional charges or interest).
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <div>
+                              <Label>Top Up Amount</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={paymentData.amount}
+                                onChange={(e) => setPaymentData(prev => ({ ...prev, amount: e.target.value, type: "topup" }))}
+                                placeholder="0.00"
+                              />
+                            </div>
+                            <div>
+                              <Label>Note (Optional)</Label>
+                              <Input
+                                value={paymentData.note}
+                                onChange={(e) => setPaymentData(prev => ({ ...prev, note: e.target.value }))}
+                                placeholder="Reason for top-up"
+                              />
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button onClick={handleMakePayment} disabled={!paymentData.amount}>
+                              Record Top Up
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button size="sm" variant="ghost" className="text-destructive">
@@ -557,6 +611,30 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
                   {debt.loanTermMonths && (
                     <div className="text-xs text-muted-foreground">
                       Loan Period: {debt.loanTermMonths} month{debt.loanTermMonths === 1 ? "" : "s"}
+                    </div>
+                  )}
+                  {payments.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      <h4 className="text-sm font-medium">Payment History</h4>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {payments.slice(0, 10).map((payment) => (
+                          <div key={payment.id} className="flex justify-between text-xs bg-muted/50 rounded px-2 py-1">
+                            <span>
+                              {payment.type === "topup" ? "+" : "-"}
+                              {formatCurrency(payment.amount)} on {format(new Date(payment.date), "MMM dd")}
+                              {payment.note && ` - ${payment.note}`}
+                            </span>
+                            <span className={payment.type === "topup" ? "text-red-500" : "text-green-500"}>
+                              {payment.type === "topup" ? "Top-up" : "Payment"}
+                            </span>
+                          </div>
+                        ))}
+                        {payments.length > 10 && (
+                          <div className="text-xs text-muted-foreground text-center py-1">
+                            +{payments.length - 10} more entries
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </CardContent>
