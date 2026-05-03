@@ -199,12 +199,12 @@ export default function AddTransaction({
         );
       }
     } else {
-      if (!amount || !category) return;
+      if (!amount || (!category && !isBundleMode) || (isBundleMode && bundleItems.length === 0)) return;
 
       const transactionData = {
         amount: parseFloat(amount),
         type,
-        category,
+        category: isBundleMode ? "bundle" : category,
         description,
         partner,
         date: selectedDate.toISOString(),
