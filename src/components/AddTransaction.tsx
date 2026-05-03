@@ -13,13 +13,21 @@ import {
 } from "@/components/ui/select";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { formatCurrency } from "@/lib/currency";
 import { Partner, Transaction, PaymentMethod, CategoryNode, TransactionBundleItem } from "@/types/budget";
 
 interface AddTransactionProps {
   onAdd: (tx: Omit<Transaction, "id">) => void;
-  onAddTransfer?: (fromAccountId: string, toAccountId: string, amount: number, partner: Partner, description: string, transactionCost?: number) => void;
+  onAddTransfer?: (
+    fromAccountId: string,
+    toAccountId: string,
+    amount: number,
+    partner: Partner,
+    description: string,
+    transactionCost?: number,
+    date?: string
+  ) => void;
   getPartnerName: (p: Partner) => string;
   expenseCategories: CategoryNode[];
   incomeCategories: CategoryNode[];
@@ -119,7 +127,7 @@ export default function AddTransaction({
       setPartner(editingTransaction.partner);
       setPaymentMethodId(editingTransaction.paymentMethodId || paymentMethods[0]?.id || "");
       setTransactionCost(editingTransaction.transactionCost?.toString() || "");
-      setSelectedDate(new Date(editingTransaction.date));
+      setSelectedDate(parseISO(editingTransaction.date));
       if (editingTransaction.type === "transfer") {
         setTransferToAccountId(editingTransaction.transferToAccountId || "");
       }
@@ -161,7 +169,7 @@ export default function AddTransaction({
           amount: parseFloat(amount),
           description: `Transfer to ${transferToAccountId}: ${description}`,
           partner,
-          date: selectedDate.toISOString(),
+          date: format(selectedDate, "yyyy-MM-dd"),
           paymentMethodId,
           transactionCost: fee ? fee / 2 : undefined,
           transferFromAccountId: paymentMethodId,
@@ -176,7 +184,7 @@ export default function AddTransaction({
           category: "transfer",
           description: `Transfer from ${paymentMethodId}: ${description}`,
           partner,
-          date: selectedDate.toISOString(),
+          date: format(selectedDate, "yyyy-MM-dd"),
           paymentMethodId: transferToAccountId,
           transactionCost: fee ? fee / 2 : undefined,
           transferFromAccountId: paymentMethodId,
@@ -195,7 +203,7 @@ export default function AddTransaction({
           partner,
           description,
           selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : undefined,
-          selectedDate.toISOString()
+          format(selectedDate, "yyyy-MM-dd")
         );
       }
     } else {
@@ -207,7 +215,7 @@ export default function AddTransaction({
         category: isBundleMode ? "bundle" : category,
         description,
         partner,
-        date: selectedDate.toISOString(),
+        date: format(selectedDate, "yyyy-MM-dd"),
         paymentMethodId: paymentMethodId || undefined,
         transactionCost: selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : undefined,
         bundleItems: isBundleMode && bundleItems.length > 0 ? bundleItems : undefined,

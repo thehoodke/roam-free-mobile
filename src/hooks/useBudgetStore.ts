@@ -37,6 +37,14 @@ function saveToStorage<T>(key: string, value: T) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+function getDateKey(dateLike: string) {
+  try {
+    return format(parseISO(dateLike), "yyyy-MM-dd");
+  } catch {
+    return dateLike.slice(0, 10);
+  }
+}
+
 function normalizePaymentMethods(stored?: PaymentMethod[]) {
   const safeStored = Array.isArray(stored)
     ? stored.filter((method): method is PaymentMethod => Boolean(method?.id && method.name))
@@ -77,7 +85,10 @@ const defaultConfig: BudgetConfig = {
 
 export function useBudgetStore() {
   const [transactions, setTransactions] = useState<Transaction[]>(() =>
-    loadFromStorage(STORAGE_KEYS.TRANSACTIONS, [])
+    loadFromStorage<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, []).map((tx) => ({
+      ...tx,
+      date: getDateKey(tx.date),
+    }))
   );
   const [profile, setProfile] = useState<CoupleProfile>(() =>
     loadFromStorage(STORAGE_KEYS.PROFILE, defaultProfile)
@@ -148,9 +159,11 @@ export function useBudgetStore() {
       });
 
       // Create the main bundle transaction (for display purposes)
+      const normalizedDate = getDateKey(tx.date);
       const mainTx: Transaction = {
         ...tx,
         id,
+        date: normalizedDate,
         bundleItems: tx.bundleItems,
       };
       bundleTransactions.push(mainTx);
@@ -164,7 +177,7 @@ export function useBudgetStore() {
           category: "💸 Transaction Fees",
           description: `Fee for ${tx.description || "bundle transaction"}`,
           partner: tx.partner,
-          date: tx.date,
+          date: normalizedDate,
           paymentMethodId: tx.paymentMethodId,
           isFee: true,
           parentId: id,
@@ -182,7 +195,8 @@ export function useBudgetStore() {
     }
 
     // Regular single transaction
-    const newTx: Transaction = { ...tx, id };
+    const normalizedDate = getDateKey(tx.date);
+    const newTx: Transaction = { ...tx, id, date: normalizedDate };
     setTransactions((prev) => {
       const next = [newTx, ...prev];
       if (tx.transactionCost && tx.transactionCost > 0) {
@@ -193,7 +207,7 @@ export function useBudgetStore() {
           category: "💸 Transaction Fees",
           description: `Fee for ${tx.description || tx.category}`,
           partner: tx.partner,
-          date: tx.date,
+          date: normalizedDate,
           paymentMethodId: tx.paymentMethodId,
           isFee: true,
           parentId: id,
@@ -365,13 +379,13 @@ export function useBudgetStore() {
 
   const getMonthTransactions = useCallback(
     (month: string) =>
-      transactions.filter((t) => t.date.startsWith(month) && (!t.parentId || t.isFee)),
+      transactions.filter((t) => getDateKey(t.date).startsWith(month) && (!t.parentId || t.isFee)),
     [transactions]
   );
 
   const getTotals = useCallback(
     (month: string) => {
-      const monthTx = transactions.filter((t) => t.date.startsWith(month) && (!t.parentId || t.isFee));
+      const monthTx = transactions.filter((t) => getDateKey(t.date).startsWith(month) && (!t.parentId || t.isFee));
       const income = monthTx
         .filter((t) => t.type === "income")
         .reduce((s, t) => s + t.amount, 0);
@@ -391,7 +405,7 @@ export function useBudgetStore() {
         .filter(
           (t) =>
             t.type === "expense" &&
-            t.date.startsWith(dayStart) &&
+            getDateKey(t.date).startsWith(dayStart) &&
             (partner ? t.partner === partner : true)
         )
         .reduce((s, t) => s + t.amount, 0);
@@ -403,7 +417,7 @@ export function useBudgetStore() {
   const getCategorySpending = useCallback(
     (month: string) => {
       const monthTx = transactions.filter(
-        (t) => t.date.startsWith(month) && t.type === "expense"
+        (t) => getDateKey(t.date).startsWith(month) && t.type === "expense"
       );
       const map: Record<string, number> = {};
       monthTx.forEach((t) => {
@@ -421,7 +435,7 @@ export function useBudgetStore() {
         .filter(
           (t) =>
             t.type === "expense" &&
-            t.date.startsWith(month) &&
+            getDateKey(t.date).startsWith(month) &&
             (partner ? t.partner === partner : true)
         )
         .reduce((s, t) => s + t.amount, 0);
@@ -433,7 +447,7 @@ export function useBudgetStore() {
   const getPartnerSpending = useCallback(
     (month: string) => {
       const monthTx = transactions.filter(
-        (t) => t.date.startsWith(month) && t.type === "expense"
+        (t) => getDateKey(t.date).startsWith(month) && t.type === "expense"
       );
       const a = monthTx.filter((t) => t.partner === "A").reduce((s, t) => s + t.amount, 0);
       const b = monthTx.filter((t) => t.partner === "B").reduce((s, t) => s + t.amount, 0);
@@ -451,7 +465,7 @@ export function useBudgetStore() {
       return interval.map((day) => {
         const dayStr = format(day, "yyyy-MM-dd");
         const dayTx = transactions.filter(
-          (t) => t.date.startsWith(dayStr) && (!t.parentId || t.isFee)
+          (t) => getDateKey(t.date).startsWith(dayStr) && (!t.parentId || t.isFee)
         );
         const income = dayTx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
         const expenses = dayTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
@@ -517,7 +531,7 @@ export function useBudgetStore() {
     partner: Partner,
     description: string,
     transactionCost?: number,
-    date: string = new Date().toISOString()
+    date: string = format(new Date(), "yyyy-MM-dd")
   ) => {
     const transferId = crypto.randomUUID();
     const fee = transactionCost ?? 0;
@@ -592,5 +606,6 @@ export function useBudgetStore() {
     addSubcategoryToTree,
     // Transfer functions
     addTransferTransaction,
+    getDateKey,
   };
 }

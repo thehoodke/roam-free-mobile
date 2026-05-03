@@ -1,7 +1,7 @@
 import { Transaction, Partner, PaymentMethod } from "@/types/budget";
 import { motion } from "framer-motion";
 import { Trash2, Edit, ChevronDown, ChevronRight } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { formatCurrency } from "@/lib/currency";
 import { useState } from "react";
 
@@ -25,7 +25,7 @@ export default function TransactionList({
   const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
 
   const toggleBundle = (txId: string) => {
-    setExpandedBundles(prev => {
+    setExpandedBundles((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(txId)) {
         newSet.delete(txId);
@@ -35,6 +35,7 @@ export default function TransactionList({
       return newSet;
     });
   };
+
   if (transactions.length === 0) {
     return (
       <div className="py-12 text-center text-muted-foreground">
@@ -65,9 +66,7 @@ export default function TransactionList({
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="font-semibold text-sm truncate">
-                    {tx.description || cat}
-                  </p>
+                  <p className="font-semibold text-sm truncate">{tx.description || cat}</p>
                   {isBundle && (
                     <button
                       onClick={() => toggleBundle(tx.id)}
@@ -78,23 +77,19 @@ export default function TransactionList({
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground truncate">
-                  {getPartnerName(tx.partner)} Â· {format(new Date(tx.date), "MMM d, yyyy")}
-                  {pm && <> Â· {pm.icon} {pm.name}</>}
-                  {isBundle && <> Â· {tx.bundleItems!.length} items</>}
+                  {getPartnerName(tx.partner)} · {format(parseISO(tx.date), "MMM d, yyyy")}
+                  {pm && <> · {pm.icon} {pm.name}</>}
+                  {isBundle && <> · {tx.bundleItems!.length} items</>}
                 </p>
               </div>
               <div className="text-right">
-                <p
-                  className={`font-bold text-sm ${
-                    tx.type === "income" ? "text-income" : "text-expense"
-                  }`}
-                >
-                  {tx.type === "income" ? "+" : "âˆ’"}{formatCurrency(tx.amount)}
+                <p className={`font-bold text-sm ${tx.type === "income" ? "text-income" : "text-expense"}`}>
+                  {tx.type === "income" ? "+" : "-"}{formatCurrency(tx.amount)}
                 </p>
                 {tx.isFee && <p className="text-[10px] text-muted-foreground">fee</p>}
               </div>
               <div className="flex gap-1">
-                {onEdit && !tx.isFee && !tx.id.endsWith('-in') && !tx.bundleItems && (
+                {onEdit && !tx.isFee && !tx.id.endsWith("-in") && !tx.bundleItems && (
                   <button
                     onClick={() => onEdit(tx)}
                     className="text-muted-foreground/50 hover:text-foreground transition-colors"
@@ -111,7 +106,6 @@ export default function TransactionList({
               </div>
             </motion.div>
 
-            {/* Bundle items */}
             {isBundle && isExpanded && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
@@ -127,15 +121,11 @@ export default function TransactionList({
                         {itemCat.split(" ")[0]}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm truncate">
-                          {item.description || itemCat}
-                        </p>
+                        <p className="text-sm truncate">{item.description || itemCat}</p>
                       </div>
                       <div className="text-right">
-                        <p className={`text-sm font-medium ${
-                          tx.type === "income" ? "text-income" : "text-expense"
-                        }`}>
-                          {tx.type === "income" ? "+" : "âˆ’"}{formatCurrency(item.amount)}
+                        <p className={`text-sm font-medium ${tx.type === "income" ? "text-income" : "text-expense"}`}>
+                          {tx.type === "income" ? "+" : "-"}{formatCurrency(item.amount)}
                         </p>
                       </div>
                     </div>
