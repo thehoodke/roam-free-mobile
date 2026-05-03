@@ -365,13 +365,13 @@ export function useBudgetStore() {
 
   const getMonthTransactions = useCallback(
     (month: string) =>
-      transactions.filter((t) => t.date.startsWith(month)),
+      transactions.filter((t) => t.date.startsWith(month) && (!t.parentId || t.isFee)),
     [transactions]
   );
 
   const getTotals = useCallback(
     (month: string) => {
-      const monthTx = transactions.filter((t) => t.date.startsWith(month));
+      const monthTx = transactions.filter((t) => t.date.startsWith(month) && (!t.parentId || t.isFee));
       const income = monthTx
         .filter((t) => t.type === "income")
         .reduce((s, t) => s + t.amount, 0);
@@ -451,7 +451,7 @@ export function useBudgetStore() {
       return interval.map((day) => {
         const dayStr = format(day, "yyyy-MM-dd");
         const dayTx = transactions.filter(
-          (t) => t.date.startsWith(dayStr)
+          (t) => t.date.startsWith(dayStr) && (!t.parentId || t.isFee)
         );
         const income = dayTx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
         const expenses = dayTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
