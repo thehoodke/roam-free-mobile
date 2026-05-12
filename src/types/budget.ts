@@ -31,6 +31,8 @@ export interface Transaction {
   parentId?: string;        // links fee to source txn
   transferToAccountId?: string; // for transfers: destination account
   transferFromAccountId?: string; // for transfers: source account
+  transferToPartner?: Partner; // for transfers: destination owner
+  transferFromPartner?: Partner; // for transfers: source owner
   bundleItems?: TransactionBundleItem[]; // for bundle transactions
 }
 

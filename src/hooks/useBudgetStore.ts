@@ -528,7 +528,8 @@ export function useBudgetStore() {
     fromAccountId: string,
     toAccountId: string,
     amount: number,
-    partner: Partner,
+    fromPartner: Partner,
+    toPartner: Partner,
     description: string,
     transactionCost?: number,
     date: string = format(new Date(), "yyyy-MM-dd")
@@ -543,12 +544,14 @@ export function useBudgetStore() {
       type: "transfer",
       category: "transfer",
       description: `Transfer to ${toAccountId}: ${description}`,
-      partner,
+      partner: fromPartner,
       date,
       paymentMethodId: fromAccountId,
       transactionCost: fee ? fee / 2 : undefined,
       transferFromAccountId: fromAccountId,
       transferToAccountId: toAccountId,
+      transferFromPartner: fromPartner,
+      transferToPartner: toPartner,
     };
 
     const transferIn: Transaction = {
@@ -557,17 +560,19 @@ export function useBudgetStore() {
       type: "transfer",
       category: "transfer",
       description: `Transfer from ${fromAccountId}: ${description}`,
-      partner,
+      partner: toPartner,
       date,
       paymentMethodId: toAccountId,
       transactionCost: fee ? fee / 2 : undefined,
       transferFromAccountId: fromAccountId,
       transferToAccountId: toAccountId,
+      transferFromPartner: fromPartner,
+      transferToPartner: toPartner,
     };
 
     setTransactions((prev) => [...prev, transferOut, transferIn]);
-    adjustBalance(fromAccountId, partner, -amount);
-    adjustBalance(toAccountId, partner, receivedAmount);
+    adjustBalance(fromAccountId, fromPartner, -amount);
+    adjustBalance(toAccountId, toPartner, receivedAmount);
 
     return { transferOut, transferIn };
   }, [adjustBalance]);

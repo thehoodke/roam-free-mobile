@@ -23,7 +23,8 @@ interface AddTransactionProps {
     fromAccountId: string,
     toAccountId: string,
     amount: number,
-    partner: Partner,
+    fromPartner: Partner,
+    toPartner: Partner,
     description: string,
     transactionCost?: number,
     date?: string
@@ -59,6 +60,8 @@ export default function AddTransaction({
   const [paymentMethodId, setPaymentMethodId] = useState<string>(paymentMethods[0]?.id || "");
   const [transactionCost, setTransactionCost] = useState("");
   const [transferToAccountId, setTransferToAccountId] = useState<string>("");
+  const [transferFromPartner, setTransferFromPartner] = useState<Partner>("A");
+  const [transferToPartner, setTransferToPartner] = useState<Partner>("A");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isBundleMode, setIsBundleMode] = useState(false);
   const [bundleItems, setBundleItems] = useState<TransactionBundleItem[]>([]);
@@ -130,6 +133,8 @@ export default function AddTransaction({
       setSelectedDate(parseISO(editingTransaction.date));
       if (editingTransaction.type === "transfer") {
         setTransferToAccountId(editingTransaction.transferToAccountId || "");
+        setTransferFromPartner(editingTransaction.transferFromPartner || editingTransaction.partner);
+        setTransferToPartner(editingTransaction.transferToPartner || editingTransaction.partner);
       }
     } else if (open) {
       // Reset form for new transaction or when editing is cancelled
@@ -141,6 +146,8 @@ export default function AddTransaction({
       setPaymentMethodId(paymentMethods[0]?.id || "");
       setTransactionCost("");
       setTransferToAccountId("");
+      setTransferFromPartner("A");
+      setTransferToPartner("A");
       setSelectedDate(new Date());
       setIsBundleMode(false);
       setBundleItems([]);
@@ -168,12 +175,14 @@ export default function AddTransaction({
           ...editingTransaction,
           amount: parseFloat(amount),
           description: `Transfer to ${transferToAccountId}: ${description}`,
-          partner,
+          partner: transferFromPartner,
           date: format(selectedDate, "yyyy-MM-dd"),
           paymentMethodId,
           transactionCost: fee ? fee / 2 : undefined,
           transferFromAccountId: paymentMethodId,
           transferToAccountId,
+          transferFromPartner,
+          transferToPartner,
         };
 
         // Update the transfer-in transaction
@@ -183,12 +192,14 @@ export default function AddTransaction({
           type: "transfer" as const,
           category: "transfer",
           description: `Transfer from ${paymentMethodId}: ${description}`,
-          partner,
+          partner: transferToPartner,
           date: format(selectedDate, "yyyy-MM-dd"),
           paymentMethodId: transferToAccountId,
           transactionCost: fee ? fee / 2 : undefined,
           transferFromAccountId: paymentMethodId,
           transferToAccountId,
+          transferFromPartner,
+          transferToPartner,
           isFee: false,
         };
 
@@ -200,7 +211,8 @@ export default function AddTransaction({
           paymentMethodId,
           transferToAccountId,
           parseFloat(amount),
-          partner,
+          transferFromPartner,
+          transferToPartner,
           description,
           selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : undefined,
           format(selectedDate, "yyyy-MM-dd")
@@ -239,6 +251,8 @@ export default function AddTransaction({
     setDescription("");
     setTransactionCost("");
     setTransferToAccountId("");
+    setTransferFromPartner("A");
+    setTransferToPartner("A");
     setOpen(false);
   };
 
@@ -320,6 +334,8 @@ export default function AddTransaction({
                       setCategory("");
                       setTransferToAccountId("");
                       setTransactionCost("");
+                      setTransferFromPartner(partner);
+                      setTransferToPartner(partner);
                     }}
                     className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${
                       type === "transfer" ? "bg-primary text-primary-foreground" : "text-muted-foreground"
@@ -480,6 +496,62 @@ export default function AddTransaction({
 
                 {type === "transfer" && (
                   <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>From Partner</Label>
+                        <div className="mt-1 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setTransferFromPartner("A")}
+                            className={`flex-1 rounded-xl border-2 py-2 text-xs font-semibold transition-colors ${
+                              transferFromPartner === "A"
+                                ? "border-partner-a bg-partner-a/10 partner-a"
+                                : "border-border text-muted-foreground"
+                            }`}
+                          >
+                            {getPartnerName("A")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTransferFromPartner("B")}
+                            className={`flex-1 rounded-xl border-2 py-2 text-xs font-semibold transition-colors ${
+                              transferFromPartner === "B"
+                                ? "border-partner-b bg-partner-b/10 partner-b"
+                                : "border-border text-muted-foreground"
+                            }`}
+                          >
+                            {getPartnerName("B")}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <Label>To Partner</Label>
+                        <div className="mt-1 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setTransferToPartner("A")}
+                            className={`flex-1 rounded-xl border-2 py-2 text-xs font-semibold transition-colors ${
+                              transferToPartner === "A"
+                                ? "border-partner-a bg-partner-a/10 partner-a"
+                                : "border-border text-muted-foreground"
+                            }`}
+                          >
+                            {getPartnerName("A")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTransferToPartner("B")}
+                            className={`flex-1 rounded-xl border-2 py-2 text-xs font-semibold transition-colors ${
+                              transferToPartner === "B"
+                                ? "border-partner-b bg-partner-b/10 partner-b"
+                                : "border-border text-muted-foreground"
+                            }`}
+                          >
+                            {getPartnerName("B")}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                     <div>
                       <Label>From Account</Label>
                       <Select value={paymentMethodId} onValueChange={setPaymentMethodId} required>
@@ -601,33 +673,35 @@ export default function AddTransaction({
                   </Popover>
                 </div>
 
-                <div>
-                  <Label>Who paid?</Label>
-                  <div className="mt-1 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPartner("A")}
-                      className={`flex-1 rounded-xl border-2 py-2.5 text-sm font-semibold transition-colors ${
-                        partner === "A"
-                          ? "border-partner-a bg-partner-a/10 partner-a"
-                          : "border-border text-muted-foreground"
-                      }`}
-                    >
-                      {getPartnerName("A")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPartner("B")}
-                      className={`flex-1 rounded-xl border-2 py-2.5 text-sm font-semibold transition-colors ${
-                        partner === "B"
-                          ? "border-partner-b bg-partner-b/10 partner-b"
-                          : "border-border text-muted-foreground"
-                      }`}
-                    >
-                      {getPartnerName("B")}
-                    </button>
+                {type !== "transfer" && (
+                  <div>
+                    <Label>Who paid?</Label>
+                    <div className="mt-1 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPartner("A")}
+                        className={`flex-1 rounded-xl border-2 py-2.5 text-sm font-semibold transition-colors ${
+                          partner === "A"
+                            ? "border-partner-a bg-partner-a/10 partner-a"
+                            : "border-border text-muted-foreground"
+                        }`}
+                      >
+                        {getPartnerName("A")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPartner("B")}
+                        className={`flex-1 rounded-xl border-2 py-2.5 text-sm font-semibold transition-colors ${
+                          partner === "B"
+                            ? "border-partner-b bg-partner-b/10 partner-b"
+                            : "border-border text-muted-foreground"
+                        }`}
+                      >
+                        {getPartnerName("B")}
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <Button type="submit" className="w-full" size="lg">
                   {editingTransaction ? "Update" : "Add"} {type === "expense" ? "Expense" : type === "income" ? "Income" : "Transfer"}
