@@ -45,6 +45,7 @@ const Index = () => {
     displayCategory,
     getPaymentMethod,
     getDateKey,
+    balances,
   } = store;
 
   const investments = useInvestments();
@@ -120,6 +121,11 @@ const Index = () => {
     };
   }, [visibleTransactions]);
 
+  const totalAccountBalance = useMemo(
+    () => balances.reduce((sum, account) => sum + account.balance, 0),
+    [balances]
+  );
+
   const balanceLabel =
     filterMode === "month"
       ? monthLabel
@@ -183,7 +189,15 @@ const Index = () => {
   }
 
   if (view === "debt") {
-    return <DebtView onBack={() => setView("home")} getPartnerName={getPartnerName} />;
+    return (
+      <DebtView
+        onBack={() => setView("home")}
+        getPartnerName={getPartnerName}
+        debtCategories={getCategoryTree("debt")}
+        paymentMethods={paymentMethods}
+        onAddTransaction={addTransaction}
+      />
+    );
   }
 
   if (view === "balances") {
@@ -247,6 +261,7 @@ const Index = () => {
           income={filterMode === "month" ? totals.income : visibleTotals.income}
           expenses={filterMode === "month" ? totals.expenses : visibleTotals.expenses}
           balance={filterMode === "month" ? adjustedBalance : visibleTotals.balance}
+          accountBalance={totalAccountBalance}
           monthLabel={balanceLabel}
           investmentNet={filterMode === "month" ? investFlow.net : 0}
           portfolioValue={investments.totalPortfolioValue}

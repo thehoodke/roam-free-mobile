@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
-import { TrendingUp, TrendingDown, LineChart } from "lucide-react";
+import { TrendingUp, TrendingDown, LineChart, Wallet } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
 
 interface BalanceCardProps {
   income: number;
   expenses: number;
   balance: number;
+  accountBalance?: number;
   monthLabel: string;
   investmentNet?: number;     // contributions - withdrawals this month
   portfolioValue?: number;    // total portfolio value (lifetime)
@@ -13,7 +14,7 @@ interface BalanceCardProps {
 }
 
 export default function BalanceCard({
-  income, expenses, balance, monthLabel,
+  income, expenses, balance, accountBalance = 0, monthLabel,
   investmentNet = 0, portfolioValue = 0, onPortfolioClick,
 }: BalanceCardProps) {
   return (
@@ -30,7 +31,7 @@ export default function BalanceCard({
         Net balance{investmentNet !== 0 && ` · after ${formatCurrency(investmentNet)} invested`}
       </p>
 
-      <div className="mt-5 grid grid-cols-2 gap-3">
+      <div className="mt-5 grid grid-cols-3 gap-3">
         <div className="flex items-center gap-2 rounded-2xl bg-income/10 p-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-income">
             <TrendingUp className="h-4 w-4 text-primary-foreground" />
@@ -47,6 +48,15 @@ export default function BalanceCard({
           <div>
             <p className="text-xs text-muted-foreground">Expenses</p>
             <p className="text-sm font-bold text-expense">{formatCurrency(expenses)}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 rounded-2xl bg-primary/10 p-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary">
+            <Wallet className="h-4 w-4 text-primary-foreground" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Account</p>
+            <p className="text-sm font-bold text-primary">{formatCurrency(accountBalance)}</p>
           </div>
         </div>
       </div>

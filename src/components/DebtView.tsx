@@ -10,8 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useDebtStore } from "@/hooks/useDebtStore";
-import { useBudgetStore } from "@/hooks/useBudgetStore";
-import { Debt, DebtPayment } from "@/types/budget";
+import { Debt, PaymentMethod, Transaction } from "@/types/budget";
 import { ArrowLeft, Plus, CreditCard, Calendar, DollarSign, TrendingUp, AlertTriangle, CheckCircle, Trash2, Receipt } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
 import { format, isAfter, isBefore, differenceInDays } from "date-fns";
@@ -19,9 +18,18 @@ import { format, isAfter, isBefore, differenceInDays } from "date-fns";
 interface DebtViewProps {
   onBack: () => void;
   getPartnerName: (p: "A" | "B") => string;
+  debtCategories: Array<{ id: string; fullPath: string }>;
+  paymentMethods: PaymentMethod[];
+  onAddTransaction: (tx: Omit<Transaction, "id">) => void;
 }
 
-export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
+export default function DebtView({
+  onBack,
+  getPartnerName,
+  debtCategories,
+  paymentMethods,
+  onAddTransaction,
+}: DebtViewProps) {
   const {
     debts,
     addDebt,
@@ -34,8 +42,6 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
     getUpcomingDebts,
     getOverdueDebts,
   } = useDebtStore();
-
-  const { getCategoryTree, getCategoryDisplayName, paymentMethods } = useBudgetStore();
 
   const [showAddDebt, setShowAddDebt] = useState(false);
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
@@ -53,6 +59,7 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
     loanType: "term" as "term" | "30-day",
     loanTermMonths: "",
     category: "",
+    creditedAccountId: "",
   });
 
   const [paymentData, setPaymentData] = useState({
@@ -62,8 +69,6 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
     note: "",
     type: "payment" as "payment" | "topup",
   });
-
-  const debtCategories = getCategoryTree('debt');
 
   const resetDebtForm = (debt: Debt | null = null) => {
     if (debt) {
@@ -78,6 +83,7 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
         loanType: debt.loanType || "term",
         loanTermMonths: debt.loanTermMonths ? String(debt.loanTermMonths) : "",
         category: debt.category,
+        creditedAccountId: "",
       });
       setEditingDebt(debt);
       setShowAddDebt(true);
@@ -95,6 +101,7 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
       loanType: "term",
       loanTermMonths: "",
       category: "",
+      creditedAccountId: "",
     });
     setEditingDebt(null);
     setShowAddDebt(false);
@@ -121,10 +128,23 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
       const updatedRemaining = Math.max(0, editingDebt.remainingAmount + amountDifference);
       updateDebt(editingDebt.id, { ...payload, remainingAmount: updatedRemaining });
     } else {
-      addDebt({
+      const createdDebt = addDebt({
         ...payload,
         remainingAmount: parseFloat(newDebt.totalAmount),
       });
+
+      // If debt proceeds were deposited to an account, record as income so balances are credited.
+      if (newDebt.creditedAccountId) {
+        onAddTransaction({
+          amount: parseFloat(newDebt.totalAmount),
+          type: "income",
+          category: createdDebt.category,
+          description: `Debt proceeds: ${createdDebt.name}`,
+          partner: createdDebt.debtor === "B" ? "B" : "A",
+          date: format(new Date(), "yyyy-MM-dd"),
+          paymentMethodId: newDebt.creditedAccountId,
+        });
+      }
     }
 
     setEditingDebt(null);
@@ -138,7 +158,7 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
     const targetDebt = showPaymentDialog || showTopupDialog;
     if (!targetDebt) return;
 
-    makeDebtPayment(
+    const payment = makeDebtPayment(
       targetDebt.id,
       parseFloat(paymentData.amount),
       paymentData.paymentMethodId || undefined,
@@ -147,6 +167,20 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
       undefined, // transactionId
       paymentData.type
     );
+
+    // Record debt settlement as a real expense transaction so account balances move.
+    if (paymentData.type === "payment" && paymentData.paymentMethodId) {
+      onAddTransaction({
+        amount: parseFloat(paymentData.amount),
+        type: "expense",
+        category: targetDebt.category,
+        description: `Debt payment: ${targetDebt.name}${paymentData.note ? ` (${paymentData.note})` : ""}`,
+        partner: targetDebt.debtor === "B" ? "B" : "A",
+        date: payment.date.slice(0, 10),
+        paymentMethodId: paymentData.paymentMethodId,
+        transactionCost: paymentData.transactionCost ? parseFloat(paymentData.transactionCost) : undefined,
+      });
+    }
 
     setPaymentData({
       amount: "",
@@ -284,6 +318,23 @@ export default function DebtView({ onBack, getPartnerName }: DebtViewProps) {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div>
+                <Label htmlFor="debt-credited-account">Credit To Account (Optional)</Label>
+                <Select value={newDebt.creditedAccountId} onValueChange={(value) =>
+                  setNewDebt(prev => ({ ...prev, creditedAccountId: value }))
+                }>
+                  <SelectTrigger id="debt-credited-account">
+                    <SelectValue placeholder="Select receiving account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {paymentMethods.map((method) => (
+                      <SelectItem key={method.id} value={method.id}>
+                        {method.icon} {method.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
