@@ -162,17 +162,16 @@ export default function AddTransaction({
       if (!amount || !paymentMethodId || !transferToAccountId) return;
 
       if (editingTransaction && onUpdate) {
-        // Editing existing transfer - need to update both transfer-out and transfer-in
+        // Editing existing transfer - update the transfer-out; store syncs the pair.
         const fee = selectedPm?.supportsFee && transactionCost ? parseFloat(transactionCost) : 0;
-        const receivedAmount = Math.max(0, parseFloat(amount) - fee);
-
-        // Find the related transfer transaction (the pair)
-        const isTransferOut = editingTransaction.id.endsWith('-out');
-        const pairId = isTransferOut ? editingTransaction.id.replace('-out', '-in') : editingTransaction.id.replace('-in', '-out');
+        const transferOutId = editingTransaction.id.endsWith("-out")
+          ? editingTransaction.id
+          : editingTransaction.id.replace("-in", "-out");
         
         // Update the transfer-out transaction
         const transferOutData = {
           ...editingTransaction,
+          id: transferOutId,
           amount: parseFloat(amount),
           description: `Transfer to ${transferToAccountId}: ${description}`,
           partner: transferFromPartner,
@@ -185,26 +184,7 @@ export default function AddTransaction({
           transferToPartner,
         };
 
-        // Update the transfer-in transaction
-        const transferInData = {
-          id: pairId,
-          amount: receivedAmount,
-          type: "transfer" as const,
-          category: "transfer",
-          description: `Transfer from ${paymentMethodId}: ${description}`,
-          partner: transferToPartner,
-          date: format(selectedDate, "yyyy-MM-dd"),
-          paymentMethodId: transferToAccountId,
-          transactionCost: fee ? fee / 2 : undefined,
-          transferFromAccountId: paymentMethodId,
-          transferToAccountId,
-          transferFromPartner,
-          transferToPartner,
-          isFee: false,
-        };
-
         onUpdate(transferOutData);
-        onUpdate(transferInData);
       } else if (onAddTransfer) {
         // Adding new transfer
         onAddTransfer(

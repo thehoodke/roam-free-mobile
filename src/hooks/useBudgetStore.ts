@@ -233,20 +233,68 @@ export function useBudgetStore() {
       const txToDelete = prev.find((t) => t.id === id);
       if (!txToDelete) return prev;
 
+      const reverseTxImpact = (tx: Transaction) => {
+        if (!tx.paymentMethodId) return;
+
+        if (tx.type === "transfer") {
+          if (!tx.id.endsWith("-out")) return;
+          const inTx = prev.find((t) => t.id === tx.id.replace("-out", "-in"));
+          if (!inTx?.paymentMethodId) return;
+          const fromPartner = tx.transferFromPartner || tx.partner;
+          const toPartner = inTx.transferToPartner || inTx.partner;
+          adjustBalance(tx.paymentMethodId, fromPartner, tx.amount);
+          adjustBalance(inTx.paymentMethodId, toPartner, -inTx.amount);
+          return;
+        }
+
+        if (tx.bundleItems && tx.bundleItems.length > 0) {
+          return;
+        }
+
+        if (tx.isFee) {
+          const parent = tx.parentId ? prev.find((p) => p.id === tx.parentId) : undefined;
+          if (parent?.bundleItems && parent.bundleItems.length > 0) {
+            adjustBalance(tx.paymentMethodId, tx.partner, tx.amount);
+          }
+          return;
+        }
+
+        if (tx.parentId) {
+          const parent = prev.find((p) => p.id === tx.parentId);
+          if (parent?.bundleItems && parent.bundleItems.length > 0) {
+            if (tx.type === "income") {
+              adjustBalance(tx.paymentMethodId, tx.partner, -tx.amount);
+            } else if (tx.type === "expense") {
+              adjustBalance(tx.paymentMethodId, tx.partner, tx.amount);
+            }
+          }
+          return;
+        }
+
+        const fee = tx.transactionCost ?? 0;
+        if (tx.type === "income") {
+          adjustBalance(tx.paymentMethodId, tx.partner, -(tx.amount - fee));
+        } else if (tx.type === "expense") {
+          adjustBalance(tx.paymentMethodId, tx.partner, tx.amount + fee);
+        }
+      };
+
       // If this is a bundle transaction, delete all bundle items too
       if (txToDelete.bundleItems && txToDelete.bundleItems.length > 0) {
         const bundleItemIds = txToDelete.bundleItems.map(item => item.id);
-        const relatedTxIds = prev
-          .filter(t => t.parentId === id || bundleItemIds.includes(t.id))
-          .map(t => t.id);
-
-        return prev.filter((t) => !relatedTxIds.includes(t.id) && t.id !== id);
+        const toDelete = prev.filter((t) => t.id === id || t.parentId === id || bundleItemIds.includes(t.id));
+        toDelete.forEach(reverseTxImpact);
+        const toDeleteIds = new Set(toDelete.map((t) => t.id));
+        return prev.filter((t) => !toDeleteIds.has(t.id));
       }
 
       // Regular transaction deletion
-      return prev.filter((t) => t.id !== id && t.parentId !== id);
+      const toDelete = prev.filter((t) => t.id === id || t.parentId === id);
+      toDelete.forEach(reverseTxImpact);
+      const toDeleteIds = new Set(toDelete.map((t) => t.id));
+      return prev.filter((t) => !toDeleteIds.has(t.id));
     });
-  }, []);
+  }, [adjustBalance]);
 
   const updateTransaction = useCallback((updatedTx: Transaction) => {
     setTransactions((prev) => {
@@ -255,17 +303,52 @@ export function useBudgetStore() {
 
       // Handle balance adjustments
       if (oldTx.type === "transfer") {
-        // For transfers, find the pair transaction
-        const isTransferOut = oldTx.id.endsWith('-out');
-        const pairId = isTransferOut ? oldTx.id.replace('-out', '-in') : oldTx.id.replace('-in', '-out');
-        const pairTx = prev.find((t) => t.id === pairId);
+        const oldOut = oldTx.id.endsWith("-out")
+          ? oldTx
+          : prev.find((t) => t.id === oldTx.id.replace("-in", "-out"));
+        const oldIn = oldTx.id.endsWith("-in")
+          ? oldTx
+          : prev.find((t) => t.id === oldTx.id.replace("-out", "-in"));
 
-        if (pairTx) {
-          // Revert old transfer balances
-          const oldFee = oldTx.transactionCost ?? 0;
-          adjustBalance(oldTx.paymentMethodId!, oldTx.partner, oldTx.amount); // Add back the sent amount
-          adjustBalance(pairTx.paymentMethodId!, pairTx.partner, -pairTx.amount); // Subtract the received amount
-        }
+        if (!oldOut || !oldIn || !oldOut.paymentMethodId || !oldIn.paymentMethodId) return prev;
+
+        const oldFromPartner = oldOut.transferFromPartner || oldOut.partner;
+        const oldToPartner = oldIn.transferToPartner || oldIn.partner;
+
+        adjustBalance(oldOut.paymentMethodId, oldFromPartner, oldOut.amount);
+        adjustBalance(oldIn.paymentMethodId, oldToPartner, -oldIn.amount);
+
+        const isUpdatedOut = updatedTx.id.endsWith("-out");
+        const nextOut = isUpdatedOut ? updatedTx : { ...oldOut };
+        const halfFee = nextOut.transactionCost ?? 0;
+        const receivedAmount = Math.max(0, nextOut.amount - (halfFee * 2));
+        const nextIn: Transaction = {
+          ...oldIn,
+          amount: receivedAmount,
+          description: `Transfer from ${nextOut.transferFromAccountId || nextOut.paymentMethodId}: ${nextOut.description.replace(/^Transfer to .*?:\s*/, "")}`,
+          date: nextOut.date,
+          partner: nextOut.transferToPartner || oldIn.partner,
+          paymentMethodId: nextOut.transferToAccountId || oldIn.paymentMethodId,
+          transactionCost: nextOut.transactionCost,
+          transferFromAccountId: nextOut.transferFromAccountId,
+          transferToAccountId: nextOut.transferToAccountId,
+          transferFromPartner: nextOut.transferFromPartner,
+          transferToPartner: nextOut.transferToPartner,
+        };
+
+        if (!nextOut.paymentMethodId || !nextIn.paymentMethodId) return prev;
+
+        const newFromPartner = nextOut.transferFromPartner || nextOut.partner;
+        const newToPartner = nextOut.transferToPartner || nextIn.partner;
+
+        adjustBalance(nextOut.paymentMethodId, newFromPartner, -nextOut.amount);
+        adjustBalance(nextIn.paymentMethodId, newToPartner, nextIn.amount);
+
+        return prev.map((t) => {
+          if (t.id === nextOut.id) return nextOut;
+          if (t.id === nextIn.id) return nextIn;
+          return t;
+        });
       } else {
         // For regular transactions, revert old balance adjustment
         if (oldTx.paymentMethodId) {
@@ -279,22 +362,7 @@ export function useBudgetStore() {
       }
 
       // Apply new balance adjustments
-      if (updatedTx.type === "transfer") {
-        // For transfers, find the pair transaction in the updated data
-        const isTransferOut = updatedTx.id.endsWith('-out');
-        const pairId = isTransferOut ? updatedTx.id.replace('-out', '-in') : updatedTx.id.replace('-in', '-out');
-        const pairTx = prev.find((t) => t.id === pairId);
-
-        if (pairTx) {
-          // Apply new transfer balances
-          const newFee = updatedTx.transactionCost ?? 0;
-          const sentAmount = updatedTx.amount;
-          const receivedAmount = Math.max(0, sentAmount - (newFee * 2)); // Fee is split between both transactions
-
-          adjustBalance(updatedTx.paymentMethodId!, updatedTx.partner, -sentAmount); // Subtract sent amount
-          adjustBalance(pairTx.paymentMethodId!, pairTx.partner, receivedAmount); // Add received amount
-        }
-      } else {
+      if (updatedTx.type !== "transfer") {
         // For regular transactions, apply new balance adjustment
         if (updatedTx.paymentMethodId) {
           const newFee = updatedTx.transactionCost ?? 0;
