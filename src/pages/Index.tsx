@@ -200,7 +200,10 @@ const Index = () => {
         getPartnerName={getPartnerName}
         debtCategories={getCategoryTree("debt")}
         paymentMethods={paymentMethods}
+        transactions={transactions}
         onAddTransaction={addTransaction}
+        onUpdateTransaction={updateTransaction}
+        onDeleteTransaction={deleteTransaction}
       />
     );
   }

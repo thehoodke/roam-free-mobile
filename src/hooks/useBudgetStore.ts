@@ -192,7 +192,7 @@ export function useBudgetStore() {
       }
 
       setTransactions((prev) => [...bundleTransactions, ...prev]);
-      return;
+      return id;
     }
 
     // Regular single transaction
@@ -294,6 +294,7 @@ export function useBudgetStore() {
       const toDeleteIds = new Set(toDelete.map((t) => t.id));
       return prev.filter((t) => !toDeleteIds.has(t.id));
     });
+    return id;
   }, [adjustBalance]);
 
   const updateTransaction = useCallback((updatedTx: Transaction) => {

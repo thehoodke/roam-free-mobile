@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useDebtStore } from "@/hooks/useDebtStore";
-import { Debt, PaymentMethod, Transaction } from "@/types/budget";
+import { Debt, DebtPayment, PaymentMethod, Transaction } from "@/types/budget";
 import { ArrowLeft, Plus, CreditCard, Calendar, DollarSign, TrendingUp, AlertTriangle, CheckCircle, Trash2, Receipt } from "lucide-react";
 import { formatCurrency } from "@/lib/currency";
 import { format, isAfter, isBefore, differenceInDays } from "date-fns";
@@ -20,7 +20,10 @@ interface DebtViewProps {
   getPartnerName: (p: "A" | "B") => string;
   debtCategories: Array<{ id: string; fullPath: string }>;
   paymentMethods: PaymentMethod[];
-  onAddTransaction: (tx: Omit<Transaction, "id">) => void;
+  transactions: Transaction[];
+  onAddTransaction: (tx: Omit<Transaction, "id">) => string | void;
+  onUpdateTransaction: (tx: Transaction) => void;
+  onDeleteTransaction: (id: string) => void;
 }
 
 export default function DebtView({
@@ -28,7 +31,10 @@ export default function DebtView({
   getPartnerName,
   debtCategories,
   paymentMethods,
+  transactions,
   onAddTransaction,
+  onUpdateTransaction,
+  onDeleteTransaction,
 }: DebtViewProps) {
   const {
     debts,
@@ -171,29 +177,32 @@ export default function DebtView({
     const targetDebt = showPaymentDialog || showTopupDialog;
     if (!targetDebt) return;
 
-    const payment = makeDebtPayment(
-      targetDebt.id,
-      parseFloat(paymentData.amount),
-      paymentData.paymentMethodId || undefined,
-      paymentData.transactionCost ? parseFloat(paymentData.transactionCost) : undefined,
-      paymentData.note || undefined,
-      undefined, // transactionId
-      paymentData.type
-    );
+    if (paymentData.type === "payment" && !paymentData.paymentMethodId) return;
 
-    // Record debt settlement as a real expense transaction so account balances move.
+    let linkedTransactionId: string | undefined;
     if (paymentData.type === "payment" && paymentData.paymentMethodId) {
-      onAddTransaction({
+      const created = onAddTransaction({
         amount: parseFloat(paymentData.amount),
         type: "expense",
         category: targetDebt.category,
         description: `Debt payment: ${targetDebt.name}${paymentData.note ? ` (${paymentData.note})` : ""}`,
         partner: targetDebt.debtor === "B" ? "B" : "A",
-        date: payment.date.slice(0, 10),
+        date: format(new Date(), "yyyy-MM-dd"),
         paymentMethodId: paymentData.paymentMethodId,
         transactionCost: paymentData.transactionCost ? parseFloat(paymentData.transactionCost) : undefined,
       });
+      linkedTransactionId = typeof created === "string" ? created : undefined;
     }
+
+    makeDebtPayment(
+      targetDebt.id,
+      parseFloat(paymentData.amount),
+      paymentData.paymentMethodId || undefined,
+      paymentData.transactionCost ? parseFloat(paymentData.transactionCost) : undefined,
+      paymentData.note || undefined,
+      linkedTransactionId,
+      paymentData.type
+    );
 
     setPaymentData({
       amount: "",
@@ -206,7 +215,7 @@ export default function DebtView({
     setShowTopupDialog(null);
   };
 
-  const startEditPayment = (payment: any) => {
+  const startEditPayment = (payment: DebtPayment) => {
     setEditingPaymentId(payment.id);
     setEditPaymentData({
       amount: String(payment.amount),
@@ -220,6 +229,10 @@ export default function DebtView({
 
   const saveEditedPayment = () => {
     if (!editingPaymentId || !editPaymentData.amount) return;
+    const existingPayment = reviewingDebt
+      ? getDebtPayments(reviewingDebt.id).find((p) => p.id === editingPaymentId)
+      : undefined;
+
     updateDebtPayment(editingPaymentId, {
       amount: parseFloat(editPaymentData.amount),
       paymentMethodId: editPaymentData.paymentMethodId || undefined,
@@ -228,6 +241,22 @@ export default function DebtView({
       type: editPaymentData.type,
       date: editPaymentData.date ? new Date(editPaymentData.date).toISOString() : undefined,
     });
+
+    if (existingPayment?.transactionId) {
+      const linkedTx = transactions.find((t) => t.id === existingPayment.transactionId);
+      if (editPaymentData.type !== "payment") {
+        onDeleteTransaction(existingPayment.transactionId);
+      } else if (linkedTx) {
+        onUpdateTransaction({
+          ...linkedTx,
+          amount: parseFloat(editPaymentData.amount),
+          paymentMethodId: editPaymentData.paymentMethodId || undefined,
+          transactionCost: editPaymentData.transactionCost ? parseFloat(editPaymentData.transactionCost) : undefined,
+          date: editPaymentData.date || linkedTx.date,
+          description: linkedTx.description,
+        });
+      }
+    }
     setEditingPaymentId(null);
   };
 
@@ -522,9 +551,10 @@ export default function DebtView({
                       <Button size="sm" variant="outline" onClick={() => resetDebtForm(debt)}>
                         Edit
                       </Button>
-                      <Dialog open={showPaymentDialog?.id === debt.id} onOpenChange={(open) =>
-                        setShowPaymentDialog(open ? debt : null)
-                      }>
+                      <Dialog open={showPaymentDialog?.id === debt.id} onOpenChange={(open) => {
+                        setShowPaymentDialog(open ? debt : null);
+                        if (open) setPaymentData(prev => ({ ...prev, type: "payment" }));
+                      }}>
                         <DialogTrigger asChild>
                           <Button size="sm" variant="outline">
                             <Receipt className="h-4 w-4 mr-1" />
@@ -594,9 +624,10 @@ export default function DebtView({
                           </DialogFooter>
                         </DialogContent>
                       </Dialog>
-                      <Dialog open={showTopupDialog?.id === debt.id} onOpenChange={(open) =>
-                        setShowTopupDialog(open ? debt : null)
-                      }>
+                      <Dialog open={showTopupDialog?.id === debt.id} onOpenChange={(open) => {
+                        setShowTopupDialog(open ? debt : null);
+                        if (open) setPaymentData(prev => ({ ...prev, type: "topup" }));
+                      }}>
                         <DialogTrigger asChild>
                           <Button size="sm" variant="outline">
                             <Plus className="h-4 w-4 mr-1" />
@@ -828,7 +859,18 @@ export default function DebtView({
                     </div>
                     <div className="flex gap-1">
                       <Button size="sm" variant="outline" onClick={() => startEditPayment(payment)}>Edit</Button>
-                      <Button size="sm" variant="destructive" onClick={() => deleteDebtPayment(payment.id)}>Delete</Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          if (payment.transactionId) {
+                            onDeleteTransaction(payment.transactionId);
+                          }
+                          deleteDebtPayment(payment.id);
+                        }}
+                      >
+                        Delete
+                      </Button>
                     </div>
                   </div>
                 )}
