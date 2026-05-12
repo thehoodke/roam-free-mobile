@@ -46,6 +46,8 @@ const Index = () => {
     getPaymentMethod,
     getDateKey,
     balances,
+    getBalanceReconciliation,
+    reconcileBalances,
   } = store;
 
   const investments = useInvestments();
@@ -142,6 +144,9 @@ const Index = () => {
         onUpdateBudgetConfig={updateBudgetConfig}
         onBack={() => setView("home")}
         getPartnerName={getPartnerName}
+        paymentMethods={paymentMethods}
+        reconciliation={getBalanceReconciliation()}
+        onReconcileBalances={reconcileBalances}
       />
     );
   }

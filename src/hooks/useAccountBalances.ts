@@ -111,6 +111,10 @@ export function useAccountBalances() {
     setBalances([]);
   }, []);
 
+  const replaceBalances = useCallback((nextBalances: AccountBalance[]) => {
+    setBalances(nextBalances);
+  }, []);
+
   return {
     balances,
     getBalance,
@@ -120,5 +124,6 @@ export function useAccountBalances() {
     getTotalBalanceByPartner,
     getAllBalancesByPartner,
     resetBalances,
+    replaceBalances,
   };
 }

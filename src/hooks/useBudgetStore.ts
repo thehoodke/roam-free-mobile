@@ -111,6 +111,7 @@ export function useBudgetStore() {
     getBalance,
     getTotalBalanceByPartner,
     getAllBalancesByPartner,
+    replaceBalances,
   } = useAccountBalances();
 
   useEffect(() => {
@@ -577,6 +578,88 @@ export function useBudgetStore() {
     return { transferOut, transferIn };
   }, [adjustBalance]);
 
+  const getBalanceReconciliation = useCallback(() => {
+    const expectedMap = new Map<string, number>();
+    const initialMap = new Map<string, number>();
+
+    balances.forEach((b) => {
+      const key = `${b.partner}:${b.paymentMethodId}`;
+      initialMap.set(key, b.initialBalance || 0);
+      expectedMap.set(key, b.initialBalance || 0);
+    });
+
+    transactions.forEach((tx) => {
+      if (!tx.paymentMethodId) return;
+      if (tx.type === "transfer") return;
+      if (tx.parentId && !tx.isFee) return;
+
+      const key = `${tx.partner}:${tx.paymentMethodId}`;
+      const current = expectedMap.get(key) ?? 0;
+
+      if (tx.type === "income") {
+        expectedMap.set(key, current + tx.amount);
+      } else if (tx.type === "expense") {
+        expectedMap.set(key, current - tx.amount);
+      }
+    });
+
+    transactions
+      .filter((tx) => tx.type === "transfer" && tx.id.endsWith("-out"))
+      .forEach((outTx) => {
+        const inTx = transactions.find((t) => t.id === outTx.id.replace("-out", "-in"));
+        if (!outTx.paymentMethodId || !inTx?.paymentMethodId) return;
+
+        const fromPartner = outTx.transferFromPartner || outTx.partner;
+        const toPartner = inTx.transferToPartner || inTx.partner;
+
+        const fromKey = `${fromPartner}:${outTx.paymentMethodId}`;
+        const toKey = `${toPartner}:${inTx.paymentMethodId}`;
+
+        expectedMap.set(fromKey, (expectedMap.get(fromKey) ?? 0) - outTx.amount);
+        expectedMap.set(toKey, (expectedMap.get(toKey) ?? 0) + inTx.amount);
+      });
+
+    const allKeys = new Set<string>([
+      ...Array.from(expectedMap.keys()),
+      ...balances.map((b) => `${b.partner}:${b.paymentMethodId}`),
+    ]);
+
+    const items = Array.from(allKeys).map((key) => {
+      const [partner, paymentMethodId] = key.split(":");
+      const stored = balances.find((b) => b.partner === partner && b.paymentMethodId === paymentMethodId)?.balance ?? 0;
+      const expected = expectedMap.get(key) ?? 0;
+      const delta = expected - stored;
+      return { key, partner: partner as Partner | "shared", paymentMethodId, stored, expected, delta };
+    });
+
+    return {
+      items: items.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)),
+      hasMismatch: items.some((i) => Math.abs(i.delta) > 0.000001),
+    };
+  }, [balances, transactions]);
+
+  const reconcileBalances = useCallback(() => {
+    const report = getBalanceReconciliation();
+    const now = new Date().toISOString();
+
+    const reconciled = report.items.map((item) => {
+      const existing = balances.find(
+        (b) => b.partner === item.partner && b.paymentMethodId === item.paymentMethodId
+      );
+      return {
+        id: existing?.id || crypto.randomUUID(),
+        paymentMethodId: item.paymentMethodId,
+        partner: item.partner,
+        initialBalance: existing?.initialBalance || 0,
+        balance: item.expected,
+        lastUpdated: now,
+      };
+    });
+
+    replaceBalances(reconciled);
+    return report;
+  }, [balances, getBalanceReconciliation, replaceBalances]);
+
   return {
     transactions,
     profile,
@@ -612,5 +695,7 @@ export function useBudgetStore() {
     // Transfer functions
     addTransferTransaction,
     getDateKey,
+    getBalanceReconciliation,
+    reconcileBalances,
   };
 }

@@ -18,6 +18,19 @@ interface SettingsViewProps {
   onUpdateBudgetConfig: (c: BudgetConfig) => void;
   onBack: () => void;
   getPartnerName: (p: "A" | "B") => string;
+  paymentMethods: PaymentMethod[];
+  reconciliation: {
+    items: Array<{
+      key: string;
+      partner: "A" | "B" | "shared";
+      paymentMethodId: string;
+      stored: number;
+      expected: number;
+      delta: number;
+    }>;
+    hasMismatch: boolean;
+  };
+  onReconcileBalances: () => void;
 }
 
 interface CategoryRowProps {
@@ -309,7 +322,7 @@ function CategoryTreeManager({ categoryTree, onUpdateTree }: CategoryTreeManager
 }
 
 export default function SettingsView({
-  profile, budgetConfig, onUpdateProfile, onUpdateBudgetConfig, onBack, getPartnerName,
+  profile, budgetConfig, onUpdateProfile, onUpdateBudgetConfig, onBack, getPartnerName, paymentMethods, reconciliation, onReconcileBalances,
 }: SettingsViewProps) {
   const [nameA, setNameA] = useState(profile.partnerAName);
   const [nameB, setNameB] = useState(profile.partnerBName);
@@ -324,7 +337,7 @@ export default function SettingsView({
   const [customInvestment, setCustomInvestment] = useState(budgetConfig.customInvestmentCategories || []);
   const [renames, setRenames] = useState<Record<string, string>>(budgetConfig.categoryRenames || {});
   const [categoryLimits, setCategoryLimits] = useState<Record<string, number>>(budgetConfig.categoryLimits);
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(budgetConfig.paymentMethods);
+  const [localPaymentMethods, setLocalPaymentMethods] = useState<PaymentMethod[]>(budgetConfig.paymentMethods);
   const [newExpenseCat, setNewExpenseCat] = useState("");
   const [newIncomeCat, setNewIncomeCat] = useState("");
   const [newInvestmentCat, setNewInvestmentCat] = useState("");
@@ -346,7 +359,7 @@ export default function SettingsView({
     customIncomeCategories: customIncome,
     categoryRenames: renames,
     categoryLimits,
-    paymentMethods,
+    paymentMethods: localPaymentMethods,
     customInvestmentCategories: customInvestment,
     categoryTree: budgetConfig.categoryTree,
     ...overrides,
@@ -388,21 +401,21 @@ export default function SettingsView({
     const name = newPmName.trim();
     if (!name) return;
     const next = [
-      ...paymentMethods,
+      ...localPaymentMethods,
       { id: crypto.randomUUID(), name, icon: newPmIcon.trim() || "💼", supportsFee: newPmFee },
     ];
-    setPaymentMethods(next);
+    setLocalPaymentMethods(next);
     persistBudgetConfig({ paymentMethods: next });
     setNewPmName(""); setNewPmIcon(""); setNewPmFee(false);
   };
   const updatePm = (id: string, patch: Partial<PaymentMethod>) => {
-    const next = paymentMethods.map((p) => (p.id === id ? { ...p, ...patch } : p));
-    setPaymentMethods(next);
+    const next = localPaymentMethods.map((p) => (p.id === id ? { ...p, ...patch } : p));
+    setLocalPaymentMethods(next);
     persistBudgetConfig({ paymentMethods: next });
   };
   const removePm = (id: string) => {
-    const next = paymentMethods.filter((p) => p.id !== id);
-    setPaymentMethods(next);
+    const next = localPaymentMethods.filter((p) => p.id !== id);
+    setLocalPaymentMethods(next);
     persistBudgetConfig({ paymentMethods: next });
   };
 
@@ -552,7 +565,7 @@ export default function SettingsView({
               <span>Payment Methods</span>
             </div>
             <p className="text-xs text-muted-foreground">Toggle "Fee" for methods like M-Pesa, bank transfers, or money transfer services. Payment changes save immediately.</p>
-            {paymentMethods.map((pm) => (
+            {localPaymentMethods.map((pm) => (
               <div key={pm.id} className="rounded-xl bg-muted p-3 space-y-2">
                 <div className="flex items-center gap-2">
                   <Input value={pm.icon || ""} onChange={(e) => updatePm(pm.id, { icon: e.target.value })} className="h-9 w-12 text-center" maxLength={2} />
@@ -578,6 +591,35 @@ export default function SettingsView({
                   <Button size="sm" variant="secondary" onClick={addPaymentMethod}><Plus className="h-4 w-4" /></Button>
                 </div>
               </div>
+            </div>
+
+            <div className="glass-card rounded-3xl p-6 space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <span>Balance Reconciliation</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Compare stored balances against transaction-derived expected balances and repair drift.
+              </p>
+              <div className="space-y-2 max-h-44 overflow-y-auto">
+                {reconciliation.items.map((item) => {
+                  const method = paymentMethods.find((pm) => pm.id === item.paymentMethodId);
+                  return (
+                    <div key={item.key} className="rounded-xl bg-muted p-2 text-xs">
+                      <div className="font-medium">
+                        {item.partner === "shared" ? "Shared" : getPartnerName(item.partner)} · {method?.icon} {method?.name || item.paymentMethodId}
+                      </div>
+                      <div>Stored: {formatCurrency(item.stored)} | Expected: {formatCurrency(item.expected)}</div>
+                      <div className={Math.abs(item.delta) > 0.000001 ? "text-destructive" : "text-green-600"}>
+                        Delta: {formatCurrency(item.delta)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <Button onClick={onReconcileBalances} variant={reconciliation.hasMismatch ? "default" : "outline"} className="w-full">
+                {reconciliation.hasMismatch ? "Repair Balances" : "Balances Already Reconciled"}
+              </Button>
             </div>
           </div>
         </TabsContent>
