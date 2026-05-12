@@ -28,6 +28,36 @@ export function useDebtStore() {
   useEffect(() => save(STORAGE_KEYS.DEBTS, debts), [debts]);
   useEffect(() => save(STORAGE_KEYS.DEBT_PAYMENTS, debtPayments), [debtPayments]);
 
+  const recalculateDebtFromPayments = useCallback((debt: Debt, payments: DebtPayment[]) => {
+    const existingTopups = debtPayments
+      .filter((p) => p.debtId === debt.id && p.type === "topup")
+      .reduce((sum, p) => sum + p.amount, 0);
+    const basePrincipal = Math.max(0, debt.totalAmount - existingTopups);
+
+    const topups = payments
+      .filter((p) => p.type === "topup")
+      .reduce((sum, p) => sum + p.amount, 0);
+    const paid = payments
+      .filter((p) => p.type !== "topup")
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const totalAmount = basePrincipal + topups;
+    const remainingAmount = Math.max(0, totalAmount - paid);
+    const lastPaymentDate = payments.length
+      ? payments
+          .map((p) => p.date)
+          .sort((a, b) => (a > b ? -1 : 1))[0]
+      : undefined;
+
+    return {
+      ...debt,
+      totalAmount,
+      remainingAmount,
+      lastPaymentDate,
+      isPaidOff: remainingAmount === 0,
+    };
+  }, [debtPayments]);
+
   const addDebt = useCallback((debt: Omit<Debt, "id" | "createdAt" | "isPaidOff">) => {
     const newDebt: Debt = {
       ...debt,
@@ -73,30 +103,57 @@ export function useDebtStore() {
       type,
     };
 
-    setDebtPayments((prev) => [payment, ...prev]);
-
-    // Update debt remaining amount
-    setDebts((prev) =>
-      prev.map((debt) => {
-        if (debt.id === debtId) {
-          const amountChange = type === "payment" ? -amount : amount;
-          const newRemaining = Math.max(0, debt.remainingAmount + amountChange);
-          const newTotal = type === "topup" ? debt.totalAmount + amount : debt.totalAmount;
-
-          return {
-            ...debt,
-            remainingAmount: newRemaining,
-            totalAmount: newTotal,
-            lastPaymentDate: payment.date,
-            isPaidOff: newRemaining === 0,
-          };
-        }
-        return debt;
-      })
-    );
+    setDebtPayments((prev) => {
+      const next = [payment, ...prev];
+      const debtPaymentsForDebt = next.filter((p) => p.debtId === debtId);
+      setDebts((prevDebts) =>
+        prevDebts.map((debt) =>
+          debt.id === debtId ? recalculateDebtFromPayments(debt, debtPaymentsForDebt) : debt
+        )
+      );
+      return next;
+    });
 
     return payment;
-  }, []);
+  }, [recalculateDebtFromPayments]);
+
+  const updateDebtPayment = useCallback((id: string, updates: Partial<DebtPayment>) => {
+    setDebtPayments((prev) => {
+      const existing = prev.find((p) => p.id === id);
+      if (!existing) return prev;
+
+      const next = prev.map((payment) =>
+        payment.id === id ? { ...payment, ...updates } : payment
+      );
+
+      const debtPaymentsForDebt = next.filter((p) => p.debtId === existing.debtId);
+      setDebts((prevDebts) =>
+        prevDebts.map((debt) =>
+          debt.id === existing.debtId ? recalculateDebtFromPayments(debt, debtPaymentsForDebt) : debt
+        )
+      );
+
+      return next;
+    });
+  }, [recalculateDebtFromPayments]);
+
+  const deleteDebtPayment = useCallback((id: string) => {
+    setDebtPayments((prev) => {
+      const existing = prev.find((p) => p.id === id);
+      if (!existing) return prev;
+
+      const next = prev.filter((payment) => payment.id !== id);
+      const debtPaymentsForDebt = next.filter((p) => p.debtId === existing.debtId);
+
+      setDebts((prevDebts) =>
+        prevDebts.map((debt) =>
+          debt.id === existing.debtId ? recalculateDebtFromPayments(debt, debtPaymentsForDebt) : debt
+        )
+      );
+
+      return next;
+    });
+  }, [recalculateDebtFromPayments]);
 
   const getDebtPayments = useCallback((debtId: string) => {
     return debtPayments.filter((payment) => payment.debtId === debtId);
@@ -140,6 +197,8 @@ export function useDebtStore() {
     updateDebt,
     deleteDebt,
     makeDebtPayment,
+    updateDebtPayment,
+    deleteDebtPayment,
     getDebtPayments,
     getTotalDebtByPartner,
     getTotalPaidOffDebts,

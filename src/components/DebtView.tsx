@@ -36,6 +36,8 @@ export default function DebtView({
     updateDebt,
     deleteDebt,
     makeDebtPayment,
+    updateDebtPayment,
+    deleteDebtPayment,
     getDebtPayments,
     getTotalDebtByPartner,
     getTotalPaidOffDebts,
@@ -47,6 +49,8 @@ export default function DebtView({
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState<Debt | null>(null);
   const [showTopupDialog, setShowTopupDialog] = useState<Debt | null>(null);
+  const [reviewingDebt, setReviewingDebt] = useState<Debt | null>(null);
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   const [paymentType, setPaymentType] = useState<"payment" | "topup">("payment");
   const [newDebt, setNewDebt] = useState({
     name: "",
@@ -68,6 +72,15 @@ export default function DebtView({
     transactionCost: "",
     note: "",
     type: "payment" as "payment" | "topup",
+  });
+
+  const [editPaymentData, setEditPaymentData] = useState({
+    amount: "",
+    paymentMethodId: "",
+    transactionCost: "",
+    note: "",
+    type: "payment" as "payment" | "topup",
+    date: "",
   });
 
   const resetDebtForm = (debt: Debt | null = null) => {
@@ -191,6 +204,31 @@ export default function DebtView({
     });
     setShowPaymentDialog(null);
     setShowTopupDialog(null);
+  };
+
+  const startEditPayment = (payment: any) => {
+    setEditingPaymentId(payment.id);
+    setEditPaymentData({
+      amount: String(payment.amount),
+      paymentMethodId: payment.paymentMethodId || "",
+      transactionCost: payment.transactionCost ? String(payment.transactionCost) : "",
+      note: payment.note || "",
+      type: payment.type || "payment",
+      date: payment.date ? payment.date.slice(0, 10) : "",
+    });
+  };
+
+  const saveEditedPayment = () => {
+    if (!editingPaymentId || !editPaymentData.amount) return;
+    updateDebtPayment(editingPaymentId, {
+      amount: parseFloat(editPaymentData.amount),
+      paymentMethodId: editPaymentData.paymentMethodId || undefined,
+      transactionCost: editPaymentData.transactionCost ? parseFloat(editPaymentData.transactionCost) : undefined,
+      note: editPaymentData.note || undefined,
+      type: editPaymentData.type,
+      date: editPaymentData.date ? new Date(editPaymentData.date).toISOString() : undefined,
+    });
+    setEditingPaymentId(null);
   };
 
   const getDebtStatus = (debt: Debt) => {
@@ -600,6 +638,9 @@ export default function DebtView({
                           </DialogFooter>
                         </DialogContent>
                       </Dialog>
+                      <Button size="sm" variant="outline" onClick={() => setReviewingDebt(debt)}>
+                        History
+                      </Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button size="sm" variant="ghost" className="text-destructive">
@@ -717,11 +758,85 @@ export default function DebtView({
                     <div className="text-xs text-muted-foreground">Total paid</div>
                   </div>
                 </div>
+                <div className="mt-3">
+                  <Button size="sm" variant="outline" onClick={() => setReviewingDebt(debt)}>
+                    Review Payment History
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <Dialog open={!!reviewingDebt} onOpenChange={(open) => { if (!open) { setReviewingDebt(null); setEditingPaymentId(null); } }}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Debt Payment History</DialogTitle>
+            <DialogDescription>
+              {reviewingDebt ? `Review and edit payments for ${reviewingDebt.name}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {reviewingDebt && getDebtPayments(reviewingDebt.id).length === 0 && (
+              <p className="text-sm text-muted-foreground">No payment entries yet.</p>
+            )}
+            {reviewingDebt && getDebtPayments(reviewingDebt.id).map((payment) => (
+              <div key={payment.id} className="rounded-lg border p-3 space-y-2">
+                {editingPaymentId === payment.id ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input type="number" value={editPaymentData.amount} onChange={(e) => setEditPaymentData(prev => ({ ...prev, amount: e.target.value }))} />
+                      <Input type="date" value={editPaymentData.date} onChange={(e) => setEditPaymentData(prev => ({ ...prev, date: e.target.value }))} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Select value={editPaymentData.type} onValueChange={(value: "payment" | "topup") => setEditPaymentData(prev => ({ ...prev, type: value }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="payment">Payment</SelectItem>
+                          <SelectItem value="topup">Top-up</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={editPaymentData.paymentMethodId} onValueChange={(value) => setEditPaymentData(prev => ({ ...prev, paymentMethodId: value }))}>
+                        <SelectTrigger><SelectValue placeholder="Method" /></SelectTrigger>
+                        <SelectContent>
+                          {paymentMethods.map((method) => (
+                            <SelectItem key={method.id} value={method.id}>{method.icon} {method.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Input placeholder="Transaction cost" type="number" value={editPaymentData.transactionCost} onChange={(e) => setEditPaymentData(prev => ({ ...prev, transactionCost: e.target.value }))} />
+                    <Input placeholder="Note" value={editPaymentData.note} onChange={(e) => setEditPaymentData(prev => ({ ...prev, note: e.target.value }))} />
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={saveEditedPayment}>Save</Button>
+                      <Button size="sm" variant="outline" onClick={() => setEditingPaymentId(null)}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-sm">
+                      <div className="font-medium">
+                        {payment.type === "topup" ? "+" : "-"}{formatCurrency(payment.amount)} · {payment.type === "topup" ? "Top-up" : "Payment"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {format(new Date(payment.date), "PPP")}
+                        {payment.paymentMethodId && ` · ${paymentMethods.find((m) => m.id === payment.paymentMethodId)?.name || payment.paymentMethodId}`}
+                        {payment.transactionCost ? ` · Fee ${formatCurrency(payment.transactionCost)}` : ""}
+                      </div>
+                      {payment.note && <div className="text-xs text-muted-foreground">{payment.note}</div>}
+                    </div>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="outline" onClick={() => startEditPayment(payment)}>Edit</Button>
+                      <Button size="sm" variant="destructive" onClick={() => deleteDebtPayment(payment.id)}>Delete</Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }
