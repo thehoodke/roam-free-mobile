@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { format, subMonths, addMonths, parseISO } from "date-fns";
+import { format, subMonths, addMonths, parseISO, addDays, subDays } from "date-fns";
 import { Settings, ChevronLeft, ChevronRight, BarChart3, LineChart, CreditCard, Wallet } from "lucide-react";
 import { useBudgetStore } from "@/hooks/useBudgetStore";
 import { useInvestments } from "@/hooks/useInvestments";
@@ -239,7 +239,26 @@ const Index = () => {
       )}
 
       {filterMode === "day" && (
-        <div className="px-5 py-2">
+        <div className="px-5 py-2 space-y-2">
+          <div className="flex items-center justify-center gap-4">
+            <button
+              onClick={() => setSelectedDay((d) => format(subDays(parseISO(d), 1), "yyyy-MM-dd"))}
+              className="text-muted-foreground"
+              aria-label="Previous day"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <span className="font-display text-sm font-semibold">
+              {format(parseISO(selectedDay), "EEEE, MMM d, yyyy")}
+            </span>
+            <button
+              onClick={() => setSelectedDay((d) => format(addDays(parseISO(d), 1), "yyyy-MM-dd"))}
+              className="text-muted-foreground"
+              aria-label="Next day"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
           <input
             type="date"
             value={selectedDay}
